@@ -48,4 +48,22 @@ pub enum LiquidityError {
     TokenMustBeDisabled,
     #[msg("Vault must be empty before removing token")]
     VaultNotEmpty,
+    #[msg("Pool has already been migrated to the role-based authority layout")]
+    AlreadyMigrated,
+    #[msg("Withdraw recipient is not configured")]
+    WithdrawRecipientNotSet,
+    #[msg("Withdraw recipient is not on the allowlist")]
+    WithdrawRecipientNotAllowed,
+    #[msg("Withdraw recipient is already on the allowlist")]
+    WithdrawRecipientAlreadyAllowed,
+    #[msg("Maximum number of withdraw recipients reached")]
+    MaxWithdrawRecipientsReached,
+    #[msg("Legacy pool data length does not match the expected pre-migration size")]
+    LegacySizeMismatch,
+    #[msg("Legacy pool discriminator does not match LiquidityPool")]
+    LegacyDiscriminatorMismatch,
+    #[msg("Legacy supported_tokens length is invalid")]
+    LegacyVecLengthInvalid,
+    #[msg("Failed to serialize the new LiquidityPool layout during migration")]
+    MigrationSerializeFailed,
 }
