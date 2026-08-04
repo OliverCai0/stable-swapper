@@ -30,12 +30,12 @@ describe("stable-swapper", () => {
 
   // Test keypairs
   let usdcMint: PublicKey;
-  let appStableMint: PublicKey;
+  let customStableMint: PublicKey;
   let pool: PublicKey;
   let usdcVault: PublicKey;
-  let appStableVault: PublicKey;
+  let customStableVault: PublicKey;
   let usdcVaultTokenAccount: PublicKey;
-  let appStableVaultTokenAccount: PublicKey;
+  let customStableVaultTokenAccount: PublicKey;
 
   // User accounts (also used for fee collection since authority is the fee recipient in tests)
   let userUsdcAccount: PublicKey;
@@ -55,7 +55,7 @@ describe("stable-swapper", () => {
       6 // USDC decimals
     );
 
-    appStableMint = await createMint(
+    customStableMint = await createMint(
       provider.connection,
       payer.payer,
       payer.publicKey,
@@ -74,8 +74,8 @@ describe("stable-swapper", () => {
       program.programId
     );
 
-    [appStableVault] = PublicKey.findProgramAddressSync(
-      [Buffer.from("token_vault"), pool.toBuffer(), appStableMint.toBuffer()],
+    [customStableVault] = PublicKey.findProgramAddressSync(
+      [Buffer.from("token_vault"), pool.toBuffer(), customStableMint.toBuffer()],
       program.programId
     );
 
@@ -84,8 +84,8 @@ describe("stable-swapper", () => {
       program.programId
     );
 
-    [appStableVaultTokenAccount] = PublicKey.findProgramAddressSync(
-      [Buffer.from("vault_token_account"), appStableVault.toBuffer()],
+    [customStableVaultTokenAccount] = PublicKey.findProgramAddressSync(
+      [Buffer.from("vault_token_account"), customStableVault.toBuffer()],
       program.programId
     );
 
@@ -95,7 +95,7 @@ describe("stable-swapper", () => {
       payer.publicKey
     );
     feeRecipientCustomStableAccount = await getAssociatedTokenAddress(
-      appStableMint,
+      customStableMint,
       payer.publicKey
     );
 
@@ -110,7 +110,7 @@ describe("stable-swapper", () => {
     userCustomStableAccount = await createAccount(
       provider.connection,
       payer.payer,
-      appStableMint,
+      customStableMint,
       payer.publicKey
     );
 
@@ -127,7 +127,7 @@ describe("stable-swapper", () => {
     await mintTo(
       provider.connection,
       payer.payer,
-      appStableMint,
+      customStableMint,
       userCustomStableAccount,
       payer.payer,
       1000 * 10 ** 6 // 1000 CustomStable
@@ -224,11 +224,11 @@ describe("stable-swapper", () => {
         .addSupportedToken()
         .accounts({
           pool,
-          vault: appStableVault,
-          vaultTokenAccount: appStableVaultTokenAccount,
+          vault: customStableVault,
+          vaultTokenAccount: customStableVaultTokenAccount,
           feeRecipientTokenAccount: feeRecipientCustomStableAccount,
           feeRecipient: payer.publicKey,
-          mint: appStableMint,
+          mint: customStableMint,
           configureAuthority: configureAuthority.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -263,7 +263,7 @@ describe("stable-swapper", () => {
         provider.connection,
         payer.payer,
         userCustomStableAccount,
-        appStableVaultTokenAccount,
+        customStableVaultTokenAccount,
         payer.payer,
         seedAmount
       );
@@ -383,15 +383,15 @@ describe("stable-swapper", () => {
         .accounts({
           pool,
           inVault: usdcVault,
-          outVault: appStableVault,
+          outVault: customStableVault,
           inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
+          outVaultTokenAccount: customStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
           toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: userUsdcAccount, // Fee collected in input token (USDC)
           feeRecipient: payer.publicKey, // Fee recipient authority
           fromMint: usdcMint,
-          toMint: appStableMint,
+          toMint: customStableMint,
           user: payer.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -413,11 +413,11 @@ describe("stable-swapper", () => {
       // Verify balances changed correctly (1:1 swap, 0% fee)
       const usdcDiff =
         initialUserUsdcBalance.amount - finalUserUsdcBalance.amount;
-      const appStableDiff =
+      const customStableDiff =
         finalUserCustomStableBalance.amount - initialUserCustomStableBalance.amount;
 
       assert.equal(usdcDiff.toString(), swapAmount.toString());
-      assert.equal(appStableDiff.toString(), swapAmount.toString()); // 1:1 with 0% fee
+      assert.equal(customStableDiff.toString(), swapAmount.toString()); // 1:1 with 0% fee
     });
 
     it("Swaps CustomStable for USDC (1:1)", async () => {
@@ -438,15 +438,15 @@ describe("stable-swapper", () => {
         .swap(swapAmount, minAmountOut)
         .accounts({
           pool,
-          inVault: appStableVault,
+          inVault: customStableVault,
           outVault: usdcVault,
-          inVaultTokenAccount: appStableVaultTokenAccount,
+          inVaultTokenAccount: customStableVaultTokenAccount,
           outVaultTokenAccount: usdcVaultTokenAccount,
           userFromTokenAccount: userCustomStableAccount,
           toTokenAccount: userUsdcAccount,
           feeRecipientTokenAccount: userCustomStableAccount, // Fee collected in input token (CustomStable)
           feeRecipient: payer.publicKey, // Fee recipient authority
-          fromMint: appStableMint,
+          fromMint: customStableMint,
           toMint: usdcMint,
           user: payer.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -469,10 +469,10 @@ describe("stable-swapper", () => {
       // Verify balances changed correctly (1:1 swap, 0% fee)
       const usdcDiff =
         finalUserUsdcBalance.amount - initialUserUsdcBalance.amount;
-      const appStableDiff =
+      const customStableDiff =
         initialUserCustomStableBalance.amount - finalUserCustomStableBalance.amount;
 
-      assert.equal(appStableDiff.toString(), swapAmount.toString());
+      assert.equal(customStableDiff.toString(), swapAmount.toString());
       assert.equal(usdcDiff.toString(), swapAmount.toString()); // 1:1 with 0% fee
     });
 
@@ -487,7 +487,7 @@ describe("stable-swapper", () => {
       const swapperCustomStableAccount = await createAccount(
         provider.connection,
         payer.payer,
-        appStableMint,
+        customStableMint,
         swapper.publicKey
       );
 
@@ -512,15 +512,15 @@ describe("stable-swapper", () => {
         .accounts({
           pool,
           inVault: usdcVault,
-          outVault: appStableVault,
+          outVault: customStableVault,
           inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
+          outVaultTokenAccount: customStableVaultTokenAccount,
           userFromTokenAccount: swapperUsdcAccount,
           toTokenAccount: swapperCustomStableAccount,
           feeRecipientTokenAccount: feeRecipientUsdcAccount,
           feeRecipient: payer.publicKey,
           fromMint: usdcMint,
-          toMint: appStableMint,
+          toMint: customStableMint,
           user: swapper.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -551,15 +551,15 @@ describe("stable-swapper", () => {
           .accounts({
             pool,
             inVault: usdcVault,
-            outVault: appStableVault,
+            outVault: customStableVault,
             inVaultTokenAccount: usdcVaultTokenAccount,
-            outVaultTokenAccount: appStableVaultTokenAccount,
+            outVaultTokenAccount: customStableVaultTokenAccount,
             userFromTokenAccount: userUsdcAccount,
             toTokenAccount: userCustomStableAccount,
             feeRecipientTokenAccount: feeRecipientUsdcAccount,
             feeRecipient: payer.publicKey,
             fromMint: usdcMint,
-            toMint: appStableMint,
+            toMint: customStableMint,
             user: unauthorizedUser.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -594,7 +594,7 @@ describe("stable-swapper", () => {
       const delegateCustomStableAccount = await createAccount(
         provider.connection,
         payer.payer,
-        appStableMint,
+        customStableMint,
         delegate.publicKey
       );
 
@@ -626,15 +626,15 @@ describe("stable-swapper", () => {
         .accounts({
           pool,
           inVault: usdcVault,
-          outVault: appStableVault,
+          outVault: customStableVault,
           inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
+          outVaultTokenAccount: customStableVaultTokenAccount,
           userFromTokenAccount: ownerUsdcAccount,
           toTokenAccount: delegateCustomStableAccount,
           feeRecipientTokenAccount: feeRecipientUsdcAccount,
           feeRecipient: payer.publicKey,
           fromMint: usdcMint,
-          toMint: appStableMint,
+          toMint: customStableMint,
           user: delegate.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -656,7 +656,7 @@ describe("stable-swapper", () => {
     it("Allows swapping exactly the full destination vault balance", async () => {
       const destinationVaultBefore = await getAccount(
         provider.connection,
-        appStableVaultTokenAccount
+        customStableVaultTokenAccount
       );
       const fullDrainAmount = new anchor.BN(
         destinationVaultBefore.amount.toString()
@@ -676,15 +676,15 @@ describe("stable-swapper", () => {
         .accounts({
           pool,
           inVault: usdcVault,
-          outVault: appStableVault,
+          outVault: customStableVault,
           inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
+          outVaultTokenAccount: customStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
           toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: feeRecipientUsdcAccount,
           feeRecipient: payer.publicKey,
           fromMint: usdcMint,
-          toMint: appStableMint,
+          toMint: customStableMint,
           user: payer.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -695,7 +695,7 @@ describe("stable-swapper", () => {
 
       const drainedVault = await getAccount(
         provider.connection,
-        appStableVaultTokenAccount
+        customStableVaultTokenAccount
       );
       assert.equal(drainedVault.amount.toString(), "0");
 
@@ -703,7 +703,7 @@ describe("stable-swapper", () => {
         provider.connection,
         payer.payer,
         userCustomStableAccount,
-        appStableVaultTokenAccount,
+        customStableVaultTokenAccount,
         payer.payer,
         BigInt(fullDrainAmount.toString())
       );
@@ -719,15 +719,15 @@ describe("stable-swapper", () => {
           .accounts({
             pool,
             inVault: usdcVault,
-            outVault: appStableVault,
+            outVault: customStableVault,
             inVaultTokenAccount: usdcVaultTokenAccount,
-            outVaultTokenAccount: appStableVaultTokenAccount,
+            outVaultTokenAccount: customStableVaultTokenAccount,
             userFromTokenAccount: userUsdcAccount,
             toTokenAccount: userCustomStableAccount,
             feeRecipientTokenAccount: userUsdcAccount,
             feeRecipient: payer.publicKey,
             fromMint: usdcMint,
-            toMint: appStableMint,
+            toMint: customStableMint,
             user: payer.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -764,15 +764,15 @@ describe("stable-swapper", () => {
           .accounts({
             pool,
             inVault: usdcVault,
-            outVault: appStableVault,
+            outVault: customStableVault,
             inVaultTokenAccount: usdcVaultTokenAccount,
-            outVaultTokenAccount: appStableVaultTokenAccount,
+            outVaultTokenAccount: customStableVaultTokenAccount,
             userFromTokenAccount: userUsdcAccount,
             toTokenAccount: userCustomStableAccount,
             feeRecipientTokenAccount: userUsdcAccount,
             feeRecipient: payer.publicKey,
             fromMint: usdcMint,
-            toMint: appStableMint,
+            toMint: customStableMint,
             user: payer.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -821,15 +821,15 @@ describe("stable-swapper", () => {
           .accounts({
             pool,
             inVault: usdcVault,
-            outVault: appStableVault,
+            outVault: customStableVault,
             inVaultTokenAccount: usdcVaultTokenAccount,
-            outVaultTokenAccount: appStableVaultTokenAccount,
+            outVaultTokenAccount: customStableVaultTokenAccount,
             userFromTokenAccount: userUsdcAccount,
             toTokenAccount: userCustomStableAccount,
             feeRecipientTokenAccount: userUsdcAccount,
             feeRecipient: payer.publicKey,
             fromMint: usdcMint,
-            toMint: appStableMint,
+            toMint: customStableMint,
             user: payer.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -885,15 +885,15 @@ describe("stable-swapper", () => {
           .accounts({
             pool,
             inVault: usdcVault,
-            outVault: appStableVault,
+            outVault: customStableVault,
             inVaultTokenAccount: usdcVaultTokenAccount,
-            outVaultTokenAccount: appStableVaultTokenAccount,
+            outVaultTokenAccount: customStableVaultTokenAccount,
             userFromTokenAccount: userUsdcAccount,
             toTokenAccount: userCustomStableAccount,
             feeRecipientTokenAccount: userUsdcAccount,
             feeRecipient: payer.publicKey,
             fromMint: usdcMint,
-            toMint: appStableMint,
+            toMint: customStableMint,
             user: payer.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -918,15 +918,15 @@ describe("stable-swapper", () => {
           .swap(swapAmount, minAmountOut)
           .accounts({
             pool,
-            inVault: appStableVault,
+            inVault: customStableVault,
             outVault: usdcVault,
-            inVaultTokenAccount: appStableVaultTokenAccount,
+            inVaultTokenAccount: customStableVaultTokenAccount,
             outVaultTokenAccount: usdcVaultTokenAccount,
             userFromTokenAccount: userCustomStableAccount,
             toTokenAccount: userUsdcAccount,
             feeRecipientTokenAccount: userCustomStableAccount,
             feeRecipient: payer.publicKey,
-            fromMint: appStableMint,
+            fromMint: customStableMint,
             toMint: usdcMint,
             user: payer.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
@@ -968,15 +968,15 @@ describe("stable-swapper", () => {
         .accounts({
           pool,
           inVault: usdcVault,
-          outVault: appStableVault,
+          outVault: customStableVault,
           inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
+          outVaultTokenAccount: customStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
           toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: userUsdcAccount,
           feeRecipient: payer.publicKey,
           fromMint: usdcMint,
-          toMint: appStableMint,
+          toMint: customStableMint,
           user: payer.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -1403,15 +1403,15 @@ describe("stable-swapper", () => {
           .accounts({
             pool,
             inVault: usdcVault,
-            outVault: appStableVault,
+            outVault: customStableVault,
             inVaultTokenAccount: usdcVaultTokenAccount,
-            outVaultTokenAccount: appStableVaultTokenAccount,
+            outVaultTokenAccount: customStableVaultTokenAccount,
             userFromTokenAccount: userUsdcAccount,
             toTokenAccount: userCustomStableAccount,
             feeRecipientTokenAccount: userUsdcAccount,
             feeRecipient: payer.publicKey,
             fromMint: usdcMint,
-            toMint: appStableMint,
+            toMint: customStableMint,
             user: payer.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -1459,15 +1459,15 @@ describe("stable-swapper", () => {
           .swap(excessiveAmount, minAmountOut)
           .accounts({
             pool,
-            inVault: appStableVault,
+            inVault: customStableVault,
             outVault: usdcVault,
-            inVaultTokenAccount: appStableVaultTokenAccount,
+            inVaultTokenAccount: customStableVaultTokenAccount,
             outVaultTokenAccount: usdcVaultTokenAccount,
             userFromTokenAccount: userCustomStableAccount,
             toTokenAccount: userUsdcAccount,
             feeRecipientTokenAccount: userCustomStableAccount,
             feeRecipient: payer.publicKey,
-            fromMint: appStableMint,
+            fromMint: customStableMint,
             toMint: usdcMint,
             user: payer.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
@@ -1533,15 +1533,15 @@ describe("stable-swapper", () => {
         .accounts({
           pool,
           inVault: usdcVault,
-          outVault: appStableVault,
+          outVault: customStableVault,
           inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
+          outVaultTokenAccount: customStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
           toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: feeRecipientUsdcAccount,
           feeRecipient: feeRecipient.publicKey,
           fromMint: usdcMint,
-          toMint: appStableMint,
+          toMint: customStableMint,
           user: payer.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -1652,15 +1652,15 @@ describe("stable-swapper", () => {
         .accounts({
           pool,
           inVault: usdcVault,
-          outVault: appStableVault,
+          outVault: customStableVault,
           inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
+          outVaultTokenAccount: customStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
           toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: newFeeRecipientUsdcAccount, // New fee recipient
           feeRecipient: newFeeRecipient.publicKey,
           fromMint: usdcMint,
-          toMint: appStableMint,
+          toMint: customStableMint,
           user: payer.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -1714,15 +1714,15 @@ describe("stable-swapper", () => {
         .accounts({
           pool,
           inVault: usdcVault,
-          outVault: appStableVault,
+          outVault: customStableVault,
           inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
+          outVaultTokenAccount: customStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
           toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: userUsdcAccount,
           feeRecipient: payer.publicKey,
           fromMint: usdcMint,
-          toMint: appStableMint,
+          toMint: customStableMint,
           user: payer.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -1744,7 +1744,7 @@ describe("stable-swapper", () => {
       // Verify 1:1 swap with no fees
       const usdcSpent =
         initialUserUsdcBalance.amount - finalUserUsdcBalance.amount;
-      const appStableReceived =
+      const customStableReceived =
         finalUserCustomStableBalance.amount - initialUserCustomStableBalance.amount;
 
       assert.equal(
@@ -1753,7 +1753,7 @@ describe("stable-swapper", () => {
         "Should spend exact swap amount"
       );
       assert.equal(
-        appStableReceived.toString(),
+        customStableReceived.toString(),
         swapAmount.toString(),
         "Should receive exact swap amount (1:1, no fees)"
       );
@@ -1808,15 +1808,15 @@ describe("stable-swapper", () => {
         .accounts({
           pool,
           inVault: usdcVault,
-          outVault: appStableVault,
+          outVault: customStableVault,
           inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
+          outVaultTokenAccount: customStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
           toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: feeRecipientUsdcAccountForTest,
           feeRecipient: feeRecipient.publicKey,
           fromMint: usdcMint,
-          toMint: appStableMint,
+          toMint: customStableMint,
           user: payer.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -1856,15 +1856,15 @@ describe("stable-swapper", () => {
         .accounts({
           pool,
           inVault: usdcVault,
-          outVault: appStableVault,
+          outVault: customStableVault,
           inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
+          outVaultTokenAccount: customStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
           toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: feeRecipientUsdcAccountForTest,
           feeRecipient: feeRecipient.publicKey,
           fromMint: usdcMint,
-          toMint: appStableMint,
+          toMint: customStableMint,
           user: payer.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -1942,15 +1942,15 @@ describe("stable-swapper", () => {
         .accounts({
           pool,
           inVault: usdcVault,
-          outVault: appStableVault,
+          outVault: customStableVault,
           inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
+          outVaultTokenAccount: customStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
           toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: feeRecipientUsdcAccountForTest,
           feeRecipient: feeRecipient.publicKey,
           fromMint: usdcMint,
-          toMint: appStableMint,
+          toMint: customStableMint,
           user: payer.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -2398,15 +2398,15 @@ describe("stable-swapper", () => {
         .accounts({
           pool,
           inVault: usdcVault,
-          outVault: appStableVault,
+          outVault: customStableVault,
           inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
+          outVaultTokenAccount: customStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
           toTokenAccount: userCustomStableAccount,
           feeRecipient: payer.publicKey,
           feeRecipientTokenAccount: userUsdcAccount,
           fromMint: usdcMint,
-          toMint: appStableMint,
+          toMint: customStableMint,
           user: payer.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
