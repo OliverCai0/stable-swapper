@@ -1,6 +1,6 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { ScaasLiquidity } from "../target/types/scaas_liquidity";
+import { StableSwapper } from "../target/types/stable_swapper";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
@@ -15,11 +15,11 @@ import {
 } from "@solana/spl-token";
 import { assert } from "chai";
 
-describe("scaas-liquidity", () => {
+describe("stable-swapper", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  const program = anchor.workspace.scaasLiquidity as Program<ScaasLiquidity>;
+  const program = anchor.workspace.stableSwapper as Program<StableSwapper>;
   const payer = provider.wallet as anchor.Wallet;
   const operationsAuthority = payer; // legacy alias retained for migration tests
   const pauseAuthority = payer;

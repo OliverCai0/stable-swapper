@@ -16,10 +16,10 @@ import { PublicKey, Keypair, SystemProgram } from "@solana/web3.js";
 import { start, ProgramTestContext } from "solana-bankrun";
 import { BankrunProvider } from "anchor-bankrun";
 import { assert } from "chai";
-import { ScaasLiquidity } from "../target/types/scaas_liquidity";
+import { StableSwapper } from "../target/types/stable_swapper";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const IDL = require("../target/idl/scaas_liquidity.json");
+const IDL = require("../target/idl/stable_swapper.json");
 
 const MAX_SUPPORTED_TOKENS = 50;
 // Pre-migration on-chain size: disc + ops + pause + fee_recipient + supported_tokens cap
@@ -67,7 +67,7 @@ function errText(error: any): string {
 describe("migrate_authorities (bankrun)", () => {
   let context: ProgramTestContext;
   let provider: BankrunProvider;
-  let program: Program<ScaasLiquidity>;
+  let program: Program<StableSwapper>;
   let programId: PublicKey;
   let pool: PublicKey;
   let poolBump: number;
@@ -99,9 +99,9 @@ describe("migrate_authorities (bankrun)", () => {
     process.env.BPF_OUT_DIR = deployDir;
 
     programId = new PublicKey(IDL.address);
-    context = await start([{ name: "scaas_liquidity", programId }], []);
+    context = await start([{ name: "stable_swapper", programId }], []);
     provider = new BankrunProvider(context);
-    program = new Program(IDL as ScaasLiquidity, provider);
+    program = new Program(IDL as StableSwapper, provider);
 
     [pool, poolBump] = PublicKey.findProgramAddressSync(
       [LIQUIDITY_POOL_SEED],

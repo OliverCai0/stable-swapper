@@ -1,4 +1,4 @@
-# SCaaS - Stablecoin-as-a-Service Liquidity Management
+# StableSwapper -- Solana
 
 A production-ready Solana-based liquidity management system designed for secure, efficient 1:1 stablecoin swapping with configurable fees and comprehensive admin controls.
 
@@ -15,7 +15,7 @@ A production-ready Solana-based liquidity management system designed for secure,
 ## 📁 Project Structure
 
 ```
-├── programs/scaas-liquidity/         # Solana program (Rust/Anchor)
+├── programs/stable-swapper/         # Solana program (Rust/Anchor)
 │   ├── src/
 │   │   ├── lib.rs                    # Instructions + account constraints
 │   │   ├── state.rs                  # Pool / vault account layouts
@@ -23,7 +23,7 @@ A production-ready Solana-based liquidity management system designed for secure,
 │   │   └── errors.rs
 │   └── Cargo.toml
 ├── tests/                            # Anchor / bankrun program tests
-│   ├── scaas-liquidity.ts            # RBAC roles, allowlist, swaps, pauses
+│   ├── stable-swapper.ts            # RBAC roles, allowlist, swaps, pauses
 │   └── migration.ts                  # Legacy → role-layout migrate_authorities
 ├── Anchor.toml                       # Anchor configuration
 ├── Cargo.toml                        # Workspace configuration
@@ -90,14 +90,14 @@ references to it before building:
 # Mint an ephemeral test keypair and align the program ID everywhere
 mkdir -p target/deploy
 solana-keygen new --no-bip39-passphrase --silent --force \
-  --outfile target/deploy/scaas_liquidity-keypair.json
-TEST_ID=$(solana address -k target/deploy/scaas_liquidity-keypair.json)
+  --outfile target/deploy/stable_swapper-keypair.json
+TEST_ID=$(solana address -k target/deploy/stable_swapper-keypair.json)
 perl -pi -e "s/declare_id!\\(\"[^\"]+\"\\)/declare_id!(\"$TEST_ID\")/" \
-  programs/scaas-liquidity/src/lib.rs
+  programs/stable-swapper/src/lib.rs
 awk -v id="$TEST_ID" '
   /^\[/  { in_localnet = ($0 ~ /^\[programs\.localnet\]$/) }
-  in_localnet && /^scaas_liquidity[[:space:]]*=/ {
-    print "scaas_liquidity = \"" id "\""; next
+  in_localnet && /^stable_swapper[[:space:]]*=/ {
+    print "stable_swapper = \"" id "\""; next
   }
   { print }
 ' Anchor.toml > Anchor.toml.tmp && mv Anchor.toml.tmp Anchor.toml
@@ -108,7 +108,7 @@ anchor build
 anchor test --provider.cluster localnet --skip-build
 
 # Restore the committed IDs when done
-git checkout -- programs/scaas-liquidity/src/lib.rs Anchor.toml
+git checkout -- programs/stable-swapper/src/lib.rs Anchor.toml
 ```
 
 CI runs the equivalent of these steps in `.github/workflows/test.yml`.
@@ -126,7 +126,7 @@ The system is configured for **Solana Devnet** by default. To change networks:
 
 ### Design Philosophy
 
-**SCaaS uses a single centralized pool** for all users and tokens:
+**StableSwapper uses a single centralized pool** for all users and tokens:
 - Pool PDA: `[b"liquidity_pool"]` (no authority in seeds)
 - Only ONE pool exists per program deployment
 - All users interact with the same global pool
