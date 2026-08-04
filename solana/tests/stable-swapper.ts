@@ -39,14 +39,14 @@ describe("stable-swapper", () => {
 
   // User accounts (also used for fee collection since authority is the fee recipient in tests)
   let userUsdcAccount: PublicKey;
-  let userAppStableAccount: PublicKey;
+  let userCustomStableAccount: PublicKey;
 
   // Fee recipient token accounts (created when tokens are added)
   let feeRecipientUsdcAccount: PublicKey;
-  let feeRecipientAppStableAccount: PublicKey;
+  let feeRecipientCustomStableAccount: PublicKey;
 
   before(async () => {
-    // Create USDC and AppStable mints
+    // Create USDC and CustomStable mints
     usdcMint = await createMint(
       provider.connection,
       payer.payer,
@@ -60,7 +60,7 @@ describe("stable-swapper", () => {
       payer.payer,
       payer.publicKey,
       null,
-      6 // AppStable decimals
+      6 // CustomStable decimals
     );
 
     // Derive PDAs (pool is now a single centralized pool, no authority in seed)
@@ -94,7 +94,7 @@ describe("stable-swapper", () => {
       usdcMint,
       payer.publicKey
     );
-    feeRecipientAppStableAccount = await getAssociatedTokenAddress(
+    feeRecipientCustomStableAccount = await getAssociatedTokenAddress(
       appStableMint,
       payer.publicKey
     );
@@ -107,7 +107,7 @@ describe("stable-swapper", () => {
       payer.publicKey
     );
 
-    userAppStableAccount = await createAccount(
+    userCustomStableAccount = await createAccount(
       provider.connection,
       payer.payer,
       appStableMint,
@@ -128,9 +128,9 @@ describe("stable-swapper", () => {
       provider.connection,
       payer.payer,
       appStableMint,
-      userAppStableAccount,
+      userCustomStableAccount,
       payer.payer,
-      1000 * 10 ** 6 // 1000 AppStable
+      1000 * 10 ** 6 // 1000 CustomStable
     );
   });
 
@@ -219,14 +219,14 @@ describe("stable-swapper", () => {
       );
     });
 
-    it("Adds AppStable as supported token", async () => {
+    it("Adds CustomStable as supported token", async () => {
       await program.methods
         .addSupportedToken()
         .accounts({
           pool,
           vault: appStableVault,
           vaultTokenAccount: appStableVaultTokenAccount,
-          feeRecipientTokenAccount: feeRecipientAppStableAccount,
+          feeRecipientTokenAccount: feeRecipientCustomStableAccount,
           feeRecipient: payer.publicKey,
           mint: appStableMint,
           configureAuthority: configureAuthority.publicKey,
@@ -262,7 +262,7 @@ describe("stable-swapper", () => {
       await transfer(
         provider.connection,
         payer.payer,
-        userAppStableAccount,
+        userCustomStableAccount,
         appStableVaultTokenAccount,
         payer.payer,
         seedAmount
@@ -364,18 +364,18 @@ describe("stable-swapper", () => {
   });
 
   describe("Swapping", () => {
-    it("Swaps USDC for AppStable (1:1)", async () => {
+    it("Swaps USDC for CustomStable (1:1)", async () => {
       const swapAmount = new anchor.BN(100 * 10 ** 6); // 100 USDC
-      const minAmountOut = new anchor.BN(100 * 10 ** 6); // Expect 100 AppStable (0% fee)
+      const minAmountOut = new anchor.BN(100 * 10 ** 6); // Expect 100 CustomStable (0% fee)
 
       // Get initial balances
       const initialUserUsdcBalance = await getAccount(
         provider.connection,
         userUsdcAccount
       );
-      const initialUserAppStableBalance = await getAccount(
+      const initialUserCustomStableBalance = await getAccount(
         provider.connection,
-        userAppStableAccount
+        userCustomStableAccount
       );
 
       await program.methods
@@ -387,7 +387,7 @@ describe("stable-swapper", () => {
           inVaultTokenAccount: usdcVaultTokenAccount,
           outVaultTokenAccount: appStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
-          toTokenAccount: userAppStableAccount,
+          toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: userUsdcAccount, // Fee collected in input token (USDC)
           feeRecipient: payer.publicKey, // Fee recipient authority
           fromMint: usdcMint,
@@ -405,23 +405,23 @@ describe("stable-swapper", () => {
         provider.connection,
         userUsdcAccount
       );
-      const finalUserAppStableBalance = await getAccount(
+      const finalUserCustomStableBalance = await getAccount(
         provider.connection,
-        userAppStableAccount
+        userCustomStableAccount
       );
 
       // Verify balances changed correctly (1:1 swap, 0% fee)
       const usdcDiff =
         initialUserUsdcBalance.amount - finalUserUsdcBalance.amount;
       const appStableDiff =
-        finalUserAppStableBalance.amount - initialUserAppStableBalance.amount;
+        finalUserCustomStableBalance.amount - initialUserCustomStableBalance.amount;
 
       assert.equal(usdcDiff.toString(), swapAmount.toString());
       assert.equal(appStableDiff.toString(), swapAmount.toString()); // 1:1 with 0% fee
     });
 
-    it("Swaps AppStable for USDC (1:1)", async () => {
-      const swapAmount = new anchor.BN(50 * 10 ** 6); // 50 AppStable
+    it("Swaps CustomStable for USDC (1:1)", async () => {
+      const swapAmount = new anchor.BN(50 * 10 ** 6); // 50 CustomStable
       const minAmountOut = new anchor.BN(50 * 10 ** 6); // Expect 50 USDC (0% fee)
 
       // Get initial balances
@@ -429,9 +429,9 @@ describe("stable-swapper", () => {
         provider.connection,
         userUsdcAccount
       );
-      const initialUserAppStableBalance = await getAccount(
+      const initialUserCustomStableBalance = await getAccount(
         provider.connection,
-        userAppStableAccount
+        userCustomStableAccount
       );
 
       await program.methods
@@ -442,9 +442,9 @@ describe("stable-swapper", () => {
           outVault: usdcVault,
           inVaultTokenAccount: appStableVaultTokenAccount,
           outVaultTokenAccount: usdcVaultTokenAccount,
-          userFromTokenAccount: userAppStableAccount,
+          userFromTokenAccount: userCustomStableAccount,
           toTokenAccount: userUsdcAccount,
-          feeRecipientTokenAccount: userAppStableAccount, // Fee collected in input token (AppStable)
+          feeRecipientTokenAccount: userCustomStableAccount, // Fee collected in input token (CustomStable)
           feeRecipient: payer.publicKey, // Fee recipient authority
           fromMint: appStableMint,
           toMint: usdcMint,
@@ -461,16 +461,16 @@ describe("stable-swapper", () => {
         provider.connection,
         userUsdcAccount
       );
-      const finalUserAppStableBalance = await getAccount(
+      const finalUserCustomStableBalance = await getAccount(
         provider.connection,
-        userAppStableAccount
+        userCustomStableAccount
       );
 
       // Verify balances changed correctly (1:1 swap, 0% fee)
       const usdcDiff =
         finalUserUsdcBalance.amount - initialUserUsdcBalance.amount;
       const appStableDiff =
-        initialUserAppStableBalance.amount - finalUserAppStableBalance.amount;
+        initialUserCustomStableBalance.amount - finalUserCustomStableBalance.amount;
 
       assert.equal(appStableDiff.toString(), swapAmount.toString());
       assert.equal(usdcDiff.toString(), swapAmount.toString()); // 1:1 with 0% fee
@@ -484,7 +484,7 @@ describe("stable-swapper", () => {
         usdcMint,
         swapper.publicKey
       );
-      const swapperAppStableAccount = await createAccount(
+      const swapperCustomStableAccount = await createAccount(
         provider.connection,
         payer.payer,
         appStableMint,
@@ -504,7 +504,7 @@ describe("stable-swapper", () => {
       const minAmountOut = new anchor.BN(10 * 10 ** 6);
       const beforeBalance = await getAccount(
         provider.connection,
-        swapperAppStableAccount
+        swapperCustomStableAccount
       );
 
       await program.methods
@@ -516,7 +516,7 @@ describe("stable-swapper", () => {
           inVaultTokenAccount: usdcVaultTokenAccount,
           outVaultTokenAccount: appStableVaultTokenAccount,
           userFromTokenAccount: swapperUsdcAccount,
-          toTokenAccount: swapperAppStableAccount,
+          toTokenAccount: swapperCustomStableAccount,
           feeRecipientTokenAccount: feeRecipientUsdcAccount,
           feeRecipient: payer.publicKey,
           fromMint: usdcMint,
@@ -531,7 +531,7 @@ describe("stable-swapper", () => {
 
       const afterBalance = await getAccount(
         provider.connection,
-        swapperAppStableAccount
+        swapperCustomStableAccount
       );
       assert.equal(
         (afterBalance.amount - beforeBalance.amount).toString(),
@@ -555,7 +555,7 @@ describe("stable-swapper", () => {
             inVaultTokenAccount: usdcVaultTokenAccount,
             outVaultTokenAccount: appStableVaultTokenAccount,
             userFromTokenAccount: userUsdcAccount,
-            toTokenAccount: userAppStableAccount,
+            toTokenAccount: userCustomStableAccount,
             feeRecipientTokenAccount: feeRecipientUsdcAccount,
             feeRecipient: payer.publicKey,
             fromMint: usdcMint,
@@ -591,7 +591,7 @@ describe("stable-swapper", () => {
         usdcMint,
         owner.publicKey
       );
-      const delegateAppStableAccount = await createAccount(
+      const delegateCustomStableAccount = await createAccount(
         provider.connection,
         payer.payer,
         appStableMint,
@@ -618,7 +618,7 @@ describe("stable-swapper", () => {
 
       const beforeBalance = await getAccount(
         provider.connection,
-        delegateAppStableAccount
+        delegateCustomStableAccount
       );
 
       await program.methods
@@ -630,7 +630,7 @@ describe("stable-swapper", () => {
           inVaultTokenAccount: usdcVaultTokenAccount,
           outVaultTokenAccount: appStableVaultTokenAccount,
           userFromTokenAccount: ownerUsdcAccount,
-          toTokenAccount: delegateAppStableAccount,
+          toTokenAccount: delegateCustomStableAccount,
           feeRecipientTokenAccount: feeRecipientUsdcAccount,
           feeRecipient: payer.publicKey,
           fromMint: usdcMint,
@@ -645,7 +645,7 @@ describe("stable-swapper", () => {
 
       const afterBalance = await getAccount(
         provider.connection,
-        delegateAppStableAccount
+        delegateCustomStableAccount
       );
       assert.equal(
         (afterBalance.amount - beforeBalance.amount).toString(),
@@ -680,7 +680,7 @@ describe("stable-swapper", () => {
           inVaultTokenAccount: usdcVaultTokenAccount,
           outVaultTokenAccount: appStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
-          toTokenAccount: userAppStableAccount,
+          toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: feeRecipientUsdcAccount,
           feeRecipient: payer.publicKey,
           fromMint: usdcMint,
@@ -702,7 +702,7 @@ describe("stable-swapper", () => {
       await transfer(
         provider.connection,
         payer.payer,
-        userAppStableAccount,
+        userCustomStableAccount,
         appStableVaultTokenAccount,
         payer.payer,
         BigInt(fullDrainAmount.toString())
@@ -723,7 +723,7 @@ describe("stable-swapper", () => {
             inVaultTokenAccount: usdcVaultTokenAccount,
             outVaultTokenAccount: appStableVaultTokenAccount,
             userFromTokenAccount: userUsdcAccount,
-            toTokenAccount: userAppStableAccount,
+            toTokenAccount: userCustomStableAccount,
             feeRecipientTokenAccount: userUsdcAccount,
             feeRecipient: payer.publicKey,
             fromMint: usdcMint,
@@ -768,7 +768,7 @@ describe("stable-swapper", () => {
             inVaultTokenAccount: usdcVaultTokenAccount,
             outVaultTokenAccount: appStableVaultTokenAccount,
             userFromTokenAccount: userUsdcAccount,
-            toTokenAccount: userAppStableAccount,
+            toTokenAccount: userCustomStableAccount,
             feeRecipientTokenAccount: userUsdcAccount,
             feeRecipient: payer.publicKey,
             fromMint: usdcMint,
@@ -825,7 +825,7 @@ describe("stable-swapper", () => {
             inVaultTokenAccount: usdcVaultTokenAccount,
             outVaultTokenAccount: appStableVaultTokenAccount,
             userFromTokenAccount: userUsdcAccount,
-            toTokenAccount: userAppStableAccount,
+            toTokenAccount: userCustomStableAccount,
             feeRecipientTokenAccount: userUsdcAccount,
             feeRecipient: payer.publicKey,
             fromMint: usdcMint,
@@ -875,7 +875,7 @@ describe("stable-swapper", () => {
       const vaultAccount = await program.account.tokenVault.fetch(usdcVault);
       assert.equal(vaultAccount.disabled, true, "Vault should be disabled");
 
-      // Try to swap USDC for AppStable (should fail)
+      // Try to swap USDC for CustomStable (should fail)
       const swapAmount = new anchor.BN(10 * 10 ** 6);
       const minAmountOut = new anchor.BN(10 * 10 ** 6);
 
@@ -889,7 +889,7 @@ describe("stable-swapper", () => {
             inVaultTokenAccount: usdcVaultTokenAccount,
             outVaultTokenAccount: appStableVaultTokenAccount,
             userFromTokenAccount: userUsdcAccount,
-            toTokenAccount: userAppStableAccount,
+            toTokenAccount: userCustomStableAccount,
             feeRecipientTokenAccount: userUsdcAccount,
             feeRecipient: payer.publicKey,
             fromMint: usdcMint,
@@ -909,7 +909,7 @@ describe("stable-swapper", () => {
     });
 
     it("Prevents swaps when output token is disabled", async () => {
-      // Try to swap AppStable for USDC (USDC is disabled from previous test)
+      // Try to swap CustomStable for USDC (USDC is disabled from previous test)
       const swapAmount = new anchor.BN(10 * 10 ** 6);
       const minAmountOut = new anchor.BN(10 * 10 ** 6);
 
@@ -922,9 +922,9 @@ describe("stable-swapper", () => {
             outVault: usdcVault,
             inVaultTokenAccount: appStableVaultTokenAccount,
             outVaultTokenAccount: usdcVaultTokenAccount,
-            userFromTokenAccount: userAppStableAccount,
+            userFromTokenAccount: userCustomStableAccount,
             toTokenAccount: userUsdcAccount,
-            feeRecipientTokenAccount: userAppStableAccount,
+            feeRecipientTokenAccount: userCustomStableAccount,
             feeRecipient: payer.publicKey,
             fromMint: appStableMint,
             toMint: usdcMint,
@@ -972,7 +972,7 @@ describe("stable-swapper", () => {
           inVaultTokenAccount: usdcVaultTokenAccount,
           outVaultTokenAccount: appStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
-          toTokenAccount: userAppStableAccount,
+          toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: userUsdcAccount,
           feeRecipient: payer.publicKey,
           fromMint: usdcMint,
@@ -1407,7 +1407,7 @@ describe("stable-swapper", () => {
             inVaultTokenAccount: usdcVaultTokenAccount,
             outVaultTokenAccount: appStableVaultTokenAccount,
             userFromTokenAccount: userUsdcAccount,
-            toTokenAccount: userAppStableAccount,
+            toTokenAccount: userCustomStableAccount,
             feeRecipientTokenAccount: userUsdcAccount,
             feeRecipient: payer.publicKey,
             fromMint: usdcMint,
@@ -1463,9 +1463,9 @@ describe("stable-swapper", () => {
             outVault: usdcVault,
             inVaultTokenAccount: appStableVaultTokenAccount,
             outVaultTokenAccount: usdcVaultTokenAccount,
-            userFromTokenAccount: userAppStableAccount,
+            userFromTokenAccount: userCustomStableAccount,
             toTokenAccount: userUsdcAccount,
-            feeRecipientTokenAccount: userAppStableAccount,
+            feeRecipientTokenAccount: userCustomStableAccount,
             feeRecipient: payer.publicKey,
             fromMint: appStableMint,
             toMint: usdcMint,
@@ -1515,9 +1515,9 @@ describe("stable-swapper", () => {
         provider.connection,
         userUsdcAccount
       );
-      const initialUserAppStableBalance = await getAccount(
+      const initialUserCustomStableBalance = await getAccount(
         provider.connection,
-        userAppStableAccount
+        userCustomStableAccount
       );
       const initialVaultUsdcBalance = await getAccount(
         provider.connection,
@@ -1537,7 +1537,7 @@ describe("stable-swapper", () => {
           inVaultTokenAccount: usdcVaultTokenAccount,
           outVaultTokenAccount: appStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
-          toTokenAccount: userAppStableAccount,
+          toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: feeRecipientUsdcAccount,
           feeRecipient: feeRecipient.publicKey,
           fromMint: usdcMint,
@@ -1555,9 +1555,9 @@ describe("stable-swapper", () => {
         provider.connection,
         userUsdcAccount
       );
-      const finalUserAppStableBalance = await getAccount(
+      const finalUserCustomStableBalance = await getAccount(
         provider.connection,
-        userAppStableAccount
+        userCustomStableAccount
       );
       const finalVaultUsdcBalance = await getAccount(
         provider.connection,
@@ -1578,10 +1578,10 @@ describe("stable-swapper", () => {
       );
 
       // Verify user received net amount (after fee deduction)
-      const userAppStableReceived =
-        finalUserAppStableBalance.amount - initialUserAppStableBalance.amount;
+      const userCustomStableReceived =
+        finalUserCustomStableBalance.amount - initialUserCustomStableBalance.amount;
       assert.equal(
-        userAppStableReceived.toString(),
+        userCustomStableReceived.toString(),
         expectedNetAmount.toString(),
         "User should receive net amount after fees"
       );
@@ -1656,7 +1656,7 @@ describe("stable-swapper", () => {
           inVaultTokenAccount: usdcVaultTokenAccount,
           outVaultTokenAccount: appStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
-          toTokenAccount: userAppStableAccount,
+          toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: newFeeRecipientUsdcAccount, // New fee recipient
           feeRecipient: newFeeRecipient.publicKey,
           fromMint: usdcMint,
@@ -1704,9 +1704,9 @@ describe("stable-swapper", () => {
         provider.connection,
         userUsdcAccount
       );
-      const initialUserAppStableBalance = await getAccount(
+      const initialUserCustomStableBalance = await getAccount(
         provider.connection,
-        userAppStableAccount
+        userCustomStableAccount
       );
 
       await program.methods
@@ -1718,7 +1718,7 @@ describe("stable-swapper", () => {
           inVaultTokenAccount: usdcVaultTokenAccount,
           outVaultTokenAccount: appStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
-          toTokenAccount: userAppStableAccount,
+          toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: userUsdcAccount,
           feeRecipient: payer.publicKey,
           fromMint: usdcMint,
@@ -1736,16 +1736,16 @@ describe("stable-swapper", () => {
         provider.connection,
         userUsdcAccount
       );
-      const finalUserAppStableBalance = await getAccount(
+      const finalUserCustomStableBalance = await getAccount(
         provider.connection,
-        userAppStableAccount
+        userCustomStableAccount
       );
 
       // Verify 1:1 swap with no fees
       const usdcSpent =
         initialUserUsdcBalance.amount - finalUserUsdcBalance.amount;
       const appStableReceived =
-        finalUserAppStableBalance.amount - initialUserAppStableBalance.amount;
+        finalUserCustomStableBalance.amount - initialUserCustomStableBalance.amount;
 
       assert.equal(
         usdcSpent.toString(),
@@ -1812,7 +1812,7 @@ describe("stable-swapper", () => {
           inVaultTokenAccount: usdcVaultTokenAccount,
           outVaultTokenAccount: appStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
-          toTokenAccount: userAppStableAccount,
+          toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: feeRecipientUsdcAccountForTest,
           feeRecipient: feeRecipient.publicKey,
           fromMint: usdcMint,
@@ -1860,7 +1860,7 @@ describe("stable-swapper", () => {
           inVaultTokenAccount: usdcVaultTokenAccount,
           outVaultTokenAccount: appStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
-          toTokenAccount: userAppStableAccount,
+          toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: feeRecipientUsdcAccountForTest,
           feeRecipient: feeRecipient.publicKey,
           fromMint: usdcMint,
@@ -1946,7 +1946,7 @@ describe("stable-swapper", () => {
           inVaultTokenAccount: usdcVaultTokenAccount,
           outVaultTokenAccount: appStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
-          toTokenAccount: userAppStableAccount,
+          toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: feeRecipientUsdcAccountForTest,
           feeRecipient: feeRecipient.publicKey,
           fromMint: usdcMint,
@@ -2382,15 +2382,15 @@ describe("stable-swapper", () => {
     it("Swaps with same decimals (6 to 6) work", async () => {
       // This tests backward compatibility - swaps between tokens with same decimals
       const swapAmount = new anchor.BN(50 * 10 ** 6); // 50 USDC
-      const minAmountOut = new anchor.BN(50 * 10 ** 6); // Expect 50 AppStable
+      const minAmountOut = new anchor.BN(50 * 10 ** 6); // Expect 50 CustomStable
 
       const userUsdcBefore = await getAccount(
         provider.connection,
         userUsdcAccount
       );
-      const userAppStableBefore = await getAccount(
+      const userCustomStableBefore = await getAccount(
         provider.connection,
-        userAppStableAccount
+        userCustomStableAccount
       );
 
       await program.methods
@@ -2402,7 +2402,7 @@ describe("stable-swapper", () => {
           inVaultTokenAccount: usdcVaultTokenAccount,
           outVaultTokenAccount: appStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
-          toTokenAccount: userAppStableAccount,
+          toTokenAccount: userCustomStableAccount,
           feeRecipient: payer.publicKey,
           feeRecipientTokenAccount: userUsdcAccount,
           fromMint: usdcMint,
@@ -2419,9 +2419,9 @@ describe("stable-swapper", () => {
         provider.connection,
         userUsdcAccount
       );
-      const userAppStableAfter = await getAccount(
+      const userCustomStableAfter = await getAccount(
         provider.connection,
-        userAppStableAccount
+        userCustomStableAccount
       );
 
       // Should still be 1:1 when decimals are the same
@@ -2431,9 +2431,9 @@ describe("stable-swapper", () => {
         "USDC deducted incorrectly"
       );
       assert.equal(
-        userAppStableAfter.amount - userAppStableBefore.amount,
+        userCustomStableAfter.amount - userCustomStableBefore.amount,
         BigInt(50 * 10 ** 6),
-        "AppStable received incorrectly"
+        "CustomStable received incorrectly"
       );
     });
   });
