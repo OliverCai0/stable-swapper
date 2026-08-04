@@ -25,13 +25,16 @@ A production-ready Solana-based liquidity management system designed for secure,
 ├── tests/                            # Anchor / bankrun program tests
 │   ├── stable-swapper.ts            # RBAC roles, allowlist, swaps, pauses
 │   └── migration.ts                  # Legacy → role-layout migrate_authorities
+├── scripts/migration-verify/         # Optional localnet/devnet upgrade→migrate e2e
 ├── Anchor.toml                       # Anchor configuration
 ├── Cargo.toml                        # Workspace configuration
 └── package.json                      # JS test / tooling deps
 ```
 
 Production deploy and one-shot `migrate_authorities` execution are handled outside
-this package (internal tooling). This repo carries the on-chain program and its tests.
+this package (internal tooling). This branch also includes
+[`scripts/migration-verify/`](./scripts/migration-verify/README.md) so reviewers can
+reproduce the upgrade → migrate path on an ephemeral program ID.
 ## 🚀 Getting Started
 
 ### Prerequisites
