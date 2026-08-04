@@ -7,10 +7,11 @@ test-ledger
 .yarn
 .claude
 .env
- **/*.env
+**/*.env
 .DS_Store
 *.swp
 *.swo
 **/deploy/*.json
 **/*-keypair.json
 **/id.json
+.migration-verify
