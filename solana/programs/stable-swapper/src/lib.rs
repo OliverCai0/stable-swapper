@@ -30,6 +30,15 @@ pub mod stable_swapper {
             ctx.accounts.withdraw_recipient.key() != Pubkey::default(),
             LiquidityError::WithdrawRecipientNotSet
         );
+        // A role assigned to the default pubkey is unrecoverable: every rotation instruction
+        // requires the current holder to sign, and nothing can sign for the zero key.
+        require_authority_set("pause_authority", &ctx.accounts.pause_authority.key())?;
+        require_authority_set("unpause_authority", &ctx.accounts.unpause_authority.key())?;
+        require_authority_set("treasury_authority", &ctx.accounts.treasury_authority.key())?;
+        require_authority_set(
+            "configure_authority",
+            &ctx.accounts.configure_authority.key(),
+        )?;
 
         let pool = &mut ctx.accounts.pool;
         pool.pause_authority = ctx.accounts.pause_authority.key();
@@ -441,6 +450,7 @@ pub mod stable_swapper {
         ctx: Context<UpdatePauseAuthority>,
         new_pause_authority: Pubkey,
     ) -> Result<()> {
+        require_authority_set("pause_authority", &new_pause_authority)?;
         let pool = &mut ctx.accounts.pool;
         pool.pause_authority = new_pause_authority;
         msg!("Updated pause_authority to: {}", new_pause_authority);
@@ -451,6 +461,7 @@ pub mod stable_swapper {
         ctx: Context<UpdateUnpauseAuthority>,
         new_unpause_authority: Pubkey,
     ) -> Result<()> {
+        require_authority_set("unpause_authority", &new_unpause_authority)?;
         let pool = &mut ctx.accounts.pool;
         pool.unpause_authority = new_unpause_authority;
         msg!("Updated unpause_authority to: {}", new_unpause_authority);
@@ -461,6 +472,7 @@ pub mod stable_swapper {
         ctx: Context<UpdateTreasuryAuthority>,
         new_treasury_authority: Pubkey,
     ) -> Result<()> {
+        require_authority_set("treasury_authority", &new_treasury_authority)?;
         let pool = &mut ctx.accounts.pool;
         pool.treasury_authority = new_treasury_authority;
         msg!("Updated treasury_authority to: {}", new_treasury_authority);
@@ -471,6 +483,7 @@ pub mod stable_swapper {
         ctx: Context<UpdateConfigureAuthority>,
         new_configure_authority: Pubkey,
     ) -> Result<()> {
+        require_authority_set("configure_authority", &new_configure_authority)?;
         let pool = &mut ctx.accounts.pool;
         pool.configure_authority = new_configure_authority;
         msg!(
@@ -481,9 +494,28 @@ pub mod stable_swapper {
     }
 }
 
+/// Rejects the default pubkey as a role holder. Roles can only be rotated by their current
+/// holder, so the zero key is a one-way door: no signature exists for it. `role` names the
+/// offending field, since a bare key comparison logs the same zero key on both sides.
+fn require_authority_set(role: &str, authority: &Pubkey) -> Result<()> {
+    if *authority == Pubkey::default() {
+        msg!("Role {} must not be set to the default pubkey", role);
+        return err!(LiquidityError::AuthorityNotSet);
+    }
+    Ok(())
+}
+
 /// Shared body for `migrate_authorities`: legacy parse, signer match, realloc, rent top-up,
 /// re-serialize. The Accounts struct on the calling instruction is responsible for verifying
 /// the pool address (the canonical PDA).
+///
+/// Rent: the pool grows by `LiquidityPool::MIGRATION_GROWTH` bytes (the two extra role keys
+/// plus the withdraw-recipient allowlist), and `legacy_operations_authority_ai` pays the
+/// difference through a `system_program::transfer` CPI. It must therefore be a system-owned
+/// account holding enough lamports (~0.0027 SOL at the current rent rate). When the pool PDA
+/// already holds `Rent::minimum_balance` for the new size the top-up is skipped entirely and no
+/// lamports are needed, which is the way to migrate when the legacy operations authority is a
+/// program-owned account that cannot be debited by the system program.
 fn do_migrate_authorities<'info>(
     pool_ai: &AccountInfo<'info>,
     legacy_operations_authority_ai: &AccountInfo<'info>,
@@ -499,6 +531,12 @@ fn do_migrate_authorities<'info>(
         new_withdraw_recipient != Pubkey::default(),
         LiquidityError::WithdrawRecipientNotSet
     );
+    // A role assigned to the default pubkey is unrecoverable: every rotation instruction
+    // requires the current holder to sign, and nothing can sign for the zero key.
+    require_authority_set("pause_authority", &new_pause_authority)?;
+    require_authority_set("unpause_authority", &new_unpause_authority)?;
+    require_authority_set("treasury_authority", &new_treasury_authority)?;
+    require_authority_set("configure_authority", &new_configure_authority)?;
 
     let legacy_total = 8 + LiquidityPool::LEGACY_INIT_SPACE;
     let new_total = 8 + LiquidityPool::INIT_SPACE;
@@ -508,14 +546,19 @@ fn do_migrate_authorities<'info>(
     require_keys_eq!(
         *pool_ai.owner,
         crate::ID,
-        LiquidityError::LegacyDiscriminatorMismatch
+        ErrorCode::AccountOwnedByWrongProgram
     );
 
-    // Re-run guard: only legacy-sized accounts are migratable. After a successful migration
-    // the account is `new_total` bytes, so a second invocation lands here.
+    // Re-run guard: after a successful migration the account is `new_total` bytes, so a second
+    // invocation is reported as already migrated. Any other unexpected size is a different
+    // failure and gets its own error.
+    require!(
+        pool_ai.data_len() != new_total,
+        LiquidityError::AlreadyMigrated
+    );
     require!(
         pool_ai.data_len() == legacy_total,
-        LiquidityError::AlreadyMigrated
+        LiquidityError::LegacySizeMismatch
     );
 
     // Snapshot legacy fields with a scoped borrow so we can drop it before realloc.
@@ -578,15 +621,16 @@ fn do_migrate_authorities<'info>(
     require_keys_eq!(
         *legacy_operations_authority_ai.key,
         legacy_ops,
-        LiquidityError::LegacyDiscriminatorMismatch
+        LiquidityError::LegacyOperationsAuthorityMismatch
     );
     require_keys_eq!(
         *legacy_pause_authority_ai.key,
         legacy_pause,
-        LiquidityError::LegacyDiscriminatorMismatch
+        LiquidityError::LegacyPauseAuthorityMismatch
     );
 
-    // Top up rent for the additional 96 bytes, then grow the account.
+    // Top up rent for the additional `LiquidityPool::MIGRATION_GROWTH` bytes, then grow the
+    // account. This is a no-op when the pool already holds the new minimum balance.
     let rent = Rent::get()?;
     let new_min_balance = rent.minimum_balance(new_total);
     let lamports_diff = new_min_balance.saturating_sub(pool_ai.lamports());
@@ -685,7 +729,8 @@ pub struct MigrateAuthorities<'info> {
     pub pool: UncheckedAccount<'info>,
 
     /// Legacy operations authority. Verified inside the instruction against the legacy on-chain
-    /// bytes; pays the additional rent for the 96-byte realloc.
+    /// bytes; pays the additional rent for the realloc unless the pool is already funded to the
+    /// new minimum balance. See `do_migrate_authorities` for the rent details.
     #[account(mut)]
     pub legacy_operations_authority: Signer<'info>,
 

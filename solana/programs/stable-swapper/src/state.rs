@@ -47,6 +47,10 @@ impl LiquidityPool {
     /// Pre-migration on-chain layout: ops + pause + fee_recipient + supported_tokens + fee_rate + 2 bools + bump.
     /// Used by `migrate_authorities` to size the pre-realloc account before expanding to `INIT_SPACE`.
     pub const LEGACY_INIT_SPACE: usize = 32 * 3 + (4 + 32 * MAX_SUPPORTED_TOKENS) + 8 + 1 + 1 + 1;
+
+    /// Bytes added by `migrate_authorities`: two extra role keys plus the withdraw-recipient
+    /// allowlist slot. Derived from the two space constants so it cannot drift from them.
+    pub const MIGRATION_GROWTH: usize = Self::INIT_SPACE - Self::LEGACY_INIT_SPACE;
 }
 
 #[account]

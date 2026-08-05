@@ -59,6 +59,18 @@ function buildLegacyPoolData(disc: Buffer, f: LegacyFields): Buffer {
   return buf;
 }
 
+/// Per-test substitutions for the accounts and role arguments the migration takes, so a test
+/// can vary one input while leaving the rest at their happy-path values.
+interface MigrateOverrides {
+  opsAuthority?: PublicKey;
+  pauseAuthority?: PublicKey;
+  newPause?: PublicKey;
+  newUnpause?: PublicKey;
+  newTreasury?: PublicKey;
+  newConfigure?: PublicKey;
+  newWithdrawRecipient?: PublicKey;
+}
+
 function errText(error: any): string {
   const logs = Array.isArray(error?.logs) ? error.logs.join("\n") : "";
   return `${logs}\n${error?.transactionMessage ?? ""}\n${error}`.toLowerCase();
@@ -147,23 +159,34 @@ describe("migrate_authorities (bankrun)", () => {
     });
   }
 
-  function migrate(signers: Keypair[], pauseAuthorityAccount?: PublicKey) {
+  function migrate(signers: Keypair[], overrides: MigrateOverrides = {}) {
     return program.methods
       .migrateAuthorities(
-        newPause.publicKey,
-        newUnpause.publicKey,
-        newTreasury.publicKey,
-        newConfigure.publicKey,
-        newWithdrawRecipient.publicKey
+        overrides.newPause ?? newPause.publicKey,
+        overrides.newUnpause ?? newUnpause.publicKey,
+        overrides.newTreasury ?? newTreasury.publicKey,
+        overrides.newConfigure ?? newConfigure.publicKey,
+        overrides.newWithdrawRecipient ?? newWithdrawRecipient.publicKey
       )
       .accounts({
         pool,
-        legacyOperationsAuthority: legacyOps.publicKey,
-        legacyPauseAuthority: pauseAuthorityAccount ?? legacyPause.publicKey,
+        legacyOperationsAuthority:
+          overrides.opsAuthority ?? legacyOps.publicKey,
+        legacyPauseAuthority: overrides.pauseAuthority ?? legacyPause.publicKey,
         systemProgram: SystemProgram.programId,
       })
       .signers(signers)
       .rpc();
+  }
+
+  function fundSystemAccount(key: PublicKey) {
+    context.setAccount(key, {
+      lamports: 1_000_000_000,
+      data: Buffer.alloc(0),
+      owner: SystemProgram.programId,
+      executable: false,
+      rentEpoch: 0,
+    });
   }
 
   async function fetchPool(): Promise<any> {
@@ -239,22 +262,77 @@ describe("migrate_authorities (bankrun)", () => {
     }
   });
 
-  it("rejects a migration when a legacy signer does not match", async () => {
+  it("rejects a migration when the legacy pause signer does not match", async () => {
     await seedLegacyPool();
     const stranger = Keypair.generate();
-    context.setAccount(stranger.publicKey, {
-      lamports: 1_000_000_000,
-      data: Buffer.alloc(0),
-      owner: SystemProgram.programId,
+    fundSystemAccount(stranger.publicKey);
+
+    try {
+      await migrate([legacyOps, stranger], {
+        pauseAuthority: stranger.publicKey,
+      });
+      assert.fail("expected legacy pause authority mismatch");
+    } catch (error) {
+      assert.include(errText(error), "legacypauseauthoritymismatch");
+    }
+  });
+
+  it("rejects a migration when the legacy operations signer does not match", async () => {
+    await seedLegacyPool();
+    const stranger = Keypair.generate();
+    fundSystemAccount(stranger.publicKey);
+
+    try {
+      await migrate([stranger, legacyPause], {
+        opsAuthority: stranger.publicKey,
+      });
+      assert.fail("expected legacy operations authority mismatch");
+    } catch (error) {
+      assert.include(errText(error), "legacyoperationsauthoritymismatch");
+    }
+  });
+
+  it("rejects a pool whose size is neither the legacy nor the migrated layout", async () => {
+    // A wrong-sized account is not the same failure as a re-run, so it must not be reported
+    // as AlreadyMigrated.
+    const data = Buffer.alloc(LEGACY_TOTAL - 1);
+    accountDiscriminator.copy(data, 0);
+    const rent = await context.banksClient.getRent();
+    context.setAccount(pool, {
+      lamports: Number(rent.minimumBalance(BigInt(data.length))),
+      data,
+      owner: programId,
       executable: false,
       rentEpoch: 0,
     });
 
     try {
-      await migrate([legacyOps, stranger], stranger.publicKey);
-      assert.fail("expected legacy signer mismatch");
+      await migrate([legacyOps, legacyPause]);
+      assert.fail("expected LegacySizeMismatch");
     } catch (error) {
-      assert.include(errText(error), "legacydiscriminatormismatch");
+      assert.include(errText(error), "legacysizemismatch");
+    }
+  });
+
+  it("rejects a migration that would assign a role to the default pubkey", async () => {
+    // Roles self-rotate, so a zero-key role could never be recovered.
+    const roles: (keyof MigrateOverrides)[] = [
+      "newPause",
+      "newUnpause",
+      "newTreasury",
+      "newConfigure",
+    ];
+
+    for (const role of roles) {
+      await seedLegacyPool();
+      try {
+        await migrate([legacyOps, legacyPause], {
+          [role]: PublicKey.default,
+        });
+        assert.fail(`expected AuthorityNotSet for ${role}`);
+      } catch (error) {
+        assert.include(errText(error), "authoritynotset", `role: ${role}`);
+      }
     }
   });
 

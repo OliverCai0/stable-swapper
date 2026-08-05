@@ -3356,6 +3356,79 @@ describe("stable-swapper", () => {
         .signers([next])
         .rpc();
     });
+
+    it("Rejects rotating any role to the default pubkey", async () => {
+      // Rotation requires the current holder to sign, so a role handed to the zero key
+      // could never be recovered.
+      const rotations: [string, () => Promise<string>][] = [
+        [
+          "pause",
+          () =>
+            program.methods
+              .updatePauseAuthority(PublicKey.default)
+              .accounts({ pool, pauseAuthority: pauseAuthority.publicKey })
+              .signers([pauseAuthority.payer])
+              .rpc(),
+        ],
+        [
+          "unpause",
+          () =>
+            program.methods
+              .updateUnpauseAuthority(PublicKey.default)
+              .accounts({ pool, unpauseAuthority: unpauseAuthority.publicKey })
+              .signers([unpauseAuthority.payer])
+              .rpc(),
+        ],
+        [
+          "treasury",
+          () =>
+            program.methods
+              .updateTreasuryAuthority(PublicKey.default)
+              .accounts({
+                pool,
+                treasuryAuthority: treasuryAuthority.publicKey,
+              })
+              .signers([treasuryAuthority.payer])
+              .rpc(),
+        ],
+        [
+          "configure",
+          () =>
+            program.methods
+              .updateConfigureAuthority(PublicKey.default)
+              .accounts({
+                pool,
+                configureAuthority: configureAuthority.publicKey,
+              })
+              .signers([configureAuthority.payer])
+              .rpc(),
+        ],
+      ];
+
+      for (const [role, rotate] of rotations) {
+        try {
+          await rotate();
+          assert.fail(`Expected AuthorityNotSet for ${role}`);
+        } catch (error) {
+          assert.include(
+            error.toString().toLowerCase(),
+            "authoritynotset",
+            `role: ${role}`
+          );
+        }
+      }
+
+      // The pool must be untouched by the rejected rotations.
+      const p = await program.account.liquidityPool.fetch(pool);
+      assert.equal(
+        p.pauseAuthority.toString(),
+        pauseAuthority.publicKey.toString()
+      );
+      assert.equal(
+        p.configureAuthority.toString(),
+        configureAuthority.publicKey.toString()
+      );
+    });
   });
 
   describe("Migration guard", () => {
