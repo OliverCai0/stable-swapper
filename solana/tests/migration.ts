@@ -254,8 +254,14 @@ describe("migrate_authorities (bankrun)", () => {
     await seedLegacyPool();
     await migrate([legacyOps, legacyPause]);
 
+    // The retry must differ from the first transaction, otherwise the SVM rejects it as
+    // already-processed (same signers, args, and blockhash) and the guard never runs. A
+    // different role key is enough: AlreadyMigrated is checked on the account length,
+    // before any of the legacy fields are parsed.
     try {
-      await migrate([legacyOps, legacyPause]);
+      await migrate([legacyOps, legacyPause], {
+        newPause: Keypair.generate().publicKey,
+      });
       assert.fail("expected AlreadyMigrated");
     } catch (error) {
       assert.include(errText(error), "alreadymigrated");

@@ -19,11 +19,13 @@ A production-ready Solana-based liquidity management system designed for secure,
 │   ├── src/
 │   │   ├── lib.rs                    # Instructions + account constraints
 │   │   ├── state.rs                  # Pool / vault account layouts
+│   │   ├── utils.rs                  # Decimal normalization (round-down)
 │   │   ├── constants.rs
 │   │   └── errors.rs
 │   └── Cargo.toml
 ├── tests/                            # Anchor / bankrun program tests
 │   ├── stable-swapper.ts            # RBAC roles, allowlist, swaps, pauses
+│   ├── initialize-guards.ts          # initialize role guards (bankrun)
 │   └── migration.ts                  # Legacy → role-layout migrate_authorities
 ├── Anchor.toml                       # Anchor configuration
 ├── Cargo.toml                        # Workspace configuration
@@ -32,6 +34,7 @@ A production-ready Solana-based liquidity management system designed for secure,
 
 Production deploy and one-shot `migrate_authorities` execution are handled outside
 this package (internal tooling). This repo carries the on-chain program and its tests.
+
 ## 🚀 Getting Started
 
 ### Prerequisites
@@ -117,6 +120,8 @@ CI runs the equivalent of these steps in `.github/workflows/test.yml`.
 
 The system is configured for **Solana Devnet** by default. To change networks:
 
+1. Point the Anchor provider at the target cluster in `Anchor.toml` (`[provider] cluster`),
+   or pass `--provider.cluster` on the command line.
 2. Update your Solana CLI configuration:
    ```bash
    solana config set --url mainnet-beta # or devnet
@@ -155,7 +160,7 @@ The system is configured for **Solana Devnet** by default. To change networks:
 | Pause Authority | CCS hot | `pause_swaps`, `pause_withdraws`, `pause_token` |
 | Unpause Authority | SCM cold | `unpause_swaps`, `unpause_withdraws`, `unpause_token` |
 | Treasury Authority | CCS hot | `withdraw_liquidity` (recipient must be on `withdraw_recipients` allowlist) |
-| Configure Authority | SCM cold | `add_supported_token`, `remove_supported_token`, `update_fee_config`, `add_withdraw_recipient`, `remove_withdraw_recipient` |
+| Configure Authority | SCM cold | `add_supported_token`, `remove_supported_token`, `update_fee_rate`, `update_fee_recipient`, `add_withdraw_recipient`, `remove_withdraw_recipient` |
 | Each role | (self) | `update_<role>_authority` (strict self-rotation) |
 
 The on-chain program upgrade authority is held by the BPF loader (rotate via `solana program set-upgrade-authority`) and is independent from the in-program roles above.
@@ -167,7 +172,7 @@ The on-chain program upgrade authority is held by the BPF loader (rotate via `so
 - **`add_supported_token` / `remove_supported_token`**: Configure Authority manages supported tokens
 - **`swap`**: Executes 1:1 swaps with slippage protection (`min_amount_out`)
 - **`withdraw_liquidity`**: Treasury Authority withdraws to a token account whose owner is on the `withdraw_recipients` allowlist
-- **`update_fee_config`**: Configure Authority updates fee rate and recipient
+- **`update_fee_rate` / `update_fee_recipient`**: Configure Authority updates the fee rate (basis points) and the fee recipient independently
 - **`add_withdraw_recipient` / `remove_withdraw_recipient`**: Configure Authority manages the withdraw allowlist (up to 10 entries)
 - **`pause_swaps` / `pause_withdraws` / `pause_token`**: Pause Authority puts the corresponding flag in the paused state
 - **`unpause_swaps` / `unpause_withdraws` / `unpause_token`**: Unpause Authority clears the flag

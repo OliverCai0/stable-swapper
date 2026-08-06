@@ -751,7 +751,7 @@ describe("stable-swapper", () => {
     it("Fails to swap when slippage protection is triggered", async () => {
       // First, set a 5% fee rate
       await program.methods
-        .updateFeeConfig(new anchor.BN(500), null) // 5% fee
+        .updateFeeRate(new anchor.BN(500)) // 5% fee
         .accounts({
           pool,
           configureAuthority: configureAuthority.publicKey,
@@ -794,7 +794,7 @@ describe("stable-swapper", () => {
 
       // Reset fee rate to 0
       await program.methods
-        .updateFeeConfig(new anchor.BN(0), null)
+        .updateFeeRate(new anchor.BN(0))
         .accounts({
           pool,
           configureAuthority: configureAuthority.publicKey,
@@ -806,7 +806,7 @@ describe("stable-swapper", () => {
     it("Fails when swap amount results in zero output (fee consumes entire input)", async () => {
       // Set a 1% fee rate (100 basis points)
       await program.methods
-        .updateFeeConfig(new anchor.BN(100), null) // 1% fee
+        .updateFeeRate(new anchor.BN(100)) // 1% fee
         .accounts({
           pool,
           configureAuthority: configureAuthority.publicKey,
@@ -853,7 +853,7 @@ describe("stable-swapper", () => {
 
       // Reset fee rate to 0
       await program.methods
-        .updateFeeConfig(new anchor.BN(0), null)
+        .updateFeeRate(new anchor.BN(0))
         .accounts({
           pool,
           configureAuthority: configureAuthority.publicKey,
@@ -1360,7 +1360,7 @@ describe("stable-swapper", () => {
       const newFeeRate = 25; // 0.25%
 
       await program.methods
-        .updateFeeConfig(new anchor.BN(newFeeRate), null) // feeRate, feeRecipient
+        .updateFeeRate(new anchor.BN(newFeeRate))
         .accounts({
           pool,
           configureAuthority: configureAuthority.publicKey,
@@ -1374,7 +1374,7 @@ describe("stable-swapper", () => {
 
       // Reset fee back to 0% for other tests
       await program.methods
-        .updateFeeConfig(new anchor.BN(0), null) // feeRate, feeRecipient
+        .updateFeeRate(new anchor.BN(0))
         .accounts({
           pool,
           configureAuthority: configureAuthority.publicKey,
@@ -1503,7 +1503,15 @@ describe("stable-swapper", () => {
 
       // Update pool to use new fee recipient and set 1% fee
       await program.methods
-        .updateFeeConfig(new anchor.BN(100), feeRecipient.publicKey)
+        .updateFeeRate(new anchor.BN(100))
+        .accounts({
+          pool,
+          configureAuthority: configureAuthority.publicKey,
+        })
+        .signers([configureAuthority.payer])
+        .rpc();
+      await program.methods
+        .updateFeeRecipient(feeRecipient.publicKey)
         .accounts({
           pool,
           configureAuthority: configureAuthority.publicKey,
@@ -1613,7 +1621,15 @@ describe("stable-swapper", () => {
 
       // Reset fee rate and fee recipient back to original
       await program.methods
-        .updateFeeConfig(new anchor.BN(0), payer.publicKey)
+        .updateFeeRate(new anchor.BN(0))
+        .accounts({
+          pool,
+          configureAuthority: configureAuthority.publicKey,
+        })
+        .signers([configureAuthority.payer])
+        .rpc();
+      await program.methods
+        .updateFeeRecipient(payer.publicKey)
         .accounts({
           pool,
           configureAuthority: configureAuthority.publicKey,
@@ -1636,7 +1652,15 @@ describe("stable-swapper", () => {
 
       // Update pool to use new fee recipient and set 1% fee
       await program.methods
-        .updateFeeConfig(new anchor.BN(100), newFeeRecipient.publicKey)
+        .updateFeeRate(new anchor.BN(100))
+        .accounts({
+          pool,
+          configureAuthority: configureAuthority.publicKey,
+        })
+        .signers([configureAuthority.payer])
+        .rpc();
+      await program.methods
+        .updateFeeRecipient(newFeeRecipient.publicKey)
         .accounts({
           pool,
           configureAuthority: configureAuthority.publicKey,
@@ -1691,7 +1715,15 @@ describe("stable-swapper", () => {
 
       // Reset fee rate and fee recipient back to original
       await program.methods
-        .updateFeeConfig(new anchor.BN(0), payer.publicKey)
+        .updateFeeRate(new anchor.BN(0))
+        .accounts({
+          pool,
+          configureAuthority: configureAuthority.publicKey,
+        })
+        .signers([configureAuthority.payer])
+        .rpc();
+      await program.methods
+        .updateFeeRecipient(payer.publicKey)
         .accounts({
           pool,
           configureAuthority: configureAuthority.publicKey,
@@ -1772,7 +1804,7 @@ describe("stable-swapper", () => {
     it("Rounds up fees to prevent protocol loss on fractional amounts", async () => {
       // Set 1% fee (100 basis points)
       await program.methods
-        .updateFeeConfig(new anchor.BN(100), null)
+        .updateFeeRate(new anchor.BN(100))
         .accounts({
           pool,
           configureAuthority: configureAuthority.publicKey,
@@ -1790,7 +1822,7 @@ describe("stable-swapper", () => {
       );
 
       await program.methods
-        .updateFeeConfig(null, feeRecipient.publicKey)
+        .updateFeeRecipient(feeRecipient.publicKey)
         .accounts({
           pool,
           configureAuthority: configureAuthority.publicKey,
@@ -1896,7 +1928,15 @@ describe("stable-swapper", () => {
 
       // Reset fee rate and recipient
       await program.methods
-        .updateFeeConfig(new anchor.BN(0), payer.publicKey)
+        .updateFeeRate(new anchor.BN(0))
+        .accounts({
+          pool,
+          configureAuthority: configureAuthority.publicKey,
+        })
+        .signers([configureAuthority.payer])
+        .rpc();
+      await program.methods
+        .updateFeeRecipient(payer.publicKey)
         .accounts({
           pool,
           configureAuthority: configureAuthority.publicKey,
@@ -1908,7 +1948,7 @@ describe("stable-swapper", () => {
     it("Does not over-charge on perfect fee amounts (no rounding needed)", async () => {
       // Set 1% fee (100 basis points)
       await program.methods
-        .updateFeeConfig(new anchor.BN(100), null)
+        .updateFeeRate(new anchor.BN(100))
         .accounts({
           pool,
           configureAuthority: configureAuthority.publicKey,
@@ -1926,7 +1966,7 @@ describe("stable-swapper", () => {
       );
 
       await program.methods
-        .updateFeeConfig(null, feeRecipient.publicKey)
+        .updateFeeRecipient(feeRecipient.publicKey)
         .accounts({
           pool,
           configureAuthority: configureAuthority.publicKey,
@@ -1982,7 +2022,15 @@ describe("stable-swapper", () => {
 
       // Reset fee rate and recipient
       await program.methods
-        .updateFeeConfig(new anchor.BN(0), payer.publicKey)
+        .updateFeeRate(new anchor.BN(0))
+        .accounts({
+          pool,
+          configureAuthority: configureAuthority.publicKey,
+        })
+        .signers([configureAuthority.payer])
+        .rpc();
+      await program.methods
+        .updateFeeRecipient(payer.publicKey)
         .accounts({
           pool,
           configureAuthority: configureAuthority.publicKey,
@@ -1998,7 +2046,7 @@ describe("stable-swapper", () => {
 
       try {
         await program.methods
-          .updateFeeConfig(new anchor.BN(excessiveFeeRate), null)
+          .updateFeeRate(new anchor.BN(excessiveFeeRate))
           .accounts({
             pool,
             configureAuthority: configureAuthority.publicKey,
@@ -2016,7 +2064,7 @@ describe("stable-swapper", () => {
       const maxFeeRate = 1000; // 10%
 
       await program.methods
-        .updateFeeConfig(new anchor.BN(maxFeeRate), null)
+        .updateFeeRate(new anchor.BN(maxFeeRate))
         .accounts({
           pool,
           configureAuthority: configureAuthority.publicKey,
@@ -2029,7 +2077,7 @@ describe("stable-swapper", () => {
 
       // Reset fee rate
       await program.methods
-        .updateFeeConfig(new anchor.BN(0), null)
+        .updateFeeRate(new anchor.BN(0))
         .accounts({
           pool,
           configureAuthority: configureAuthority.publicKey,
@@ -2923,7 +2971,7 @@ describe("stable-swapper", () => {
     it("Fails when unauthorized user tries to update fee config", async () => {
       try {
         await program.methods
-          .updateFeeConfig(new anchor.BN(50), null)
+          .updateFeeRate(new anchor.BN(50))
           .accounts({
             pool,
             configureAuthority: unauthorizedUser.publicKey, // Wrong authority

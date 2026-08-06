@@ -347,27 +347,21 @@ pub mod stable_swapper {
         Ok(())
     }
 
-    pub fn update_fee_config(
+    pub fn update_fee_rate(ctx: Context<UpdateFeeConfig>, fee_rate: u64) -> Result<()> {
+        require!(fee_rate <= MAX_FEE_RATE, LiquidityError::InvalidFeeRate);
+        ctx.accounts.pool.fee_rate = fee_rate;
+        msg!("Updated fee rate to: {}", fee_rate);
+        Ok(())
+    }
+
+    /// Changing the fee recipient only affects future swaps. Fees already collected in the old
+    /// recipient's token accounts remain owned by the previous recipient.
+    pub fn update_fee_recipient(
         ctx: Context<UpdateFeeConfig>,
-        fee_rate: Option<u64>,
-        fee_recipient: Option<Pubkey>,
+        fee_recipient: Pubkey,
     ) -> Result<()> {
-        let pool = &mut ctx.accounts.pool;
-
-        if let Some(new_fee_rate) = fee_rate {
-            require!(new_fee_rate <= MAX_FEE_RATE, LiquidityError::InvalidFeeRate);
-            pool.fee_rate = new_fee_rate;
-            msg!("Updated fee rate to: {}", new_fee_rate);
-        }
-
-        if let Some(new_fee_recipient) = fee_recipient {
-            // Note: Changing the fee recipient only affects future swaps.
-            // Fees already collected in the old recipient's token accounts
-            // remain owned by the previous recipient.
-            pool.fee_recipient = new_fee_recipient;
-            msg!("Updated fee recipient to: {}", new_fee_recipient);
-        }
-
+        ctx.accounts.pool.fee_recipient = fee_recipient;
+        msg!("Updated fee recipient to: {}", fee_recipient);
         Ok(())
     }
 
