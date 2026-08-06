@@ -44,6 +44,27 @@ to reject, so the output is evidence rather than assertion. The cold-key actions
 are then performed for real and reverted, which is the on-chain shape of "this
 needs a formal quorum and security review".
 
+## Presenting it live
+
+Phases 02, 04, and 05 colourise their output, animate in-flight transactions, and
+print each check the moment it resolves rather than dumping a wall of text at the
+end. All of that switches itself off when stdout is not a TTY, so piping a run
+into a file or into CI still produces plain, greppable text.
+
+| Variable                        | Effect                                                                    |
+| ------------------------------- | ------------------------------------------------------------------------- |
+| `MIGRATION_VERIFY_DEMO_PACE`    | Milliseconds to pause between steps so an audience can follow. Try `400`. |
+| `FORCE_COLOR=1`                 | Keep colour when piping through `tee`, e.g. to record a session.          |
+| `NO_COLOR=1`                    | Plain text even on a TTY.                                                 |
+| `MIGRATION_VERIFY_NO_ANIMATION` | Keep colour but drop the spinners.                                        |
+
+For a walkthrough in front of people:
+
+```bash
+export MIGRATION_VERIFY_DEMO_PACE=400
+yarn ts-node scripts/migration-verify/05-smoke-authorities.ts
+```
+
 An ephemeral program keypair is generated under `.migration-verify/keys/`.
 Committed pins (`declare_id!`, `[programs.localnet]` / `[programs.devnet]`) are
 patched for the run and restored by cleanup. **Never** use these scripts against

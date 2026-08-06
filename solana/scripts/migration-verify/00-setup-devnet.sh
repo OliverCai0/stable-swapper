@@ -14,9 +14,8 @@ if [[ ! -f "$WALLET_PATH" ]]; then
   exit 1
 fi
 
-echo "============================================================"
-echo "00 — SETUP DEVNET MIGRATION VERIFY"
-echo "============================================================"
+banner "00 — SETUP DEVNET MIGRATION VERIFY" \
+  "throwaway program ID, funded wallet, devnet state file"
 echo "- Solana dir: $SOLANA_DIR"
 echo "- Wallet:     $WALLET_PATH"
 echo "- RPC:        $DEVNET_URL"
@@ -31,12 +30,12 @@ solana-keygen new --no-bip39-passphrase --silent --force \
   --outfile "$STABLE_PROGRAM_KEYPAIR"
 cp "$STABLE_PROGRAM_KEYPAIR" "$DEPLOY_KEYPAIR"
 PROGRAM_ID="$(solana address -k "$STABLE_PROGRAM_KEYPAIR")"
-echo "✓ Ephemeral program ID: $PROGRAM_ID"
+say_ok "Ephemeral program ID: $PROGRAM_ID"
 echo "  (pinned 9vDw… is NOT used)"
 
 # Patch declare_id! + [programs.devnet] only.
 patch_program_id "$LIB_RS" "$ANCHOR_TOML" "$PROGRAM_ID" "devnet"
-echo "✓ Patched declare_id! and [programs.devnet]"
+say_ok "Patched declare_id! and [programs.devnet]"
 
 export ANCHOR_PROVIDER_URL="$DEVNET_URL"
 export ANCHOR_WALLET="$WALLET_PATH"
@@ -47,7 +46,7 @@ if ! rpc_up "$DEVNET_URL"; then
   echo "❌ Cannot reach $DEVNET_URL"
   exit 1
 fi
-echo "✓ Devnet RPC reachable"
+say_ok "Devnet RPC reachable"
 
 WALLET_PUB="$(solana address -k "$WALLET_PATH")"
 echo "Airdropping SOL to $WALLET_PUB (faucet may rate-limit)..."
@@ -56,7 +55,7 @@ for amt in 2 2 2 1 1; do
   sleep 1
 done
 BAL="$(solana balance "$WALLET_PUB" --url "$DEVNET_URL" | awk '{print $1}')"
-echo "✓ Wallet balance: ${BAL} SOL"
+say_ok "Wallet balance: ${BAL} SOL"
 # Need enough for program deploy + rent (~3+ SOL typically for large .so).
 NEED_MIN=3
 awk -v bal="$BAL" -v need="$NEED_MIN" 'BEGIN { exit !(bal+0 >= need) }' || {
@@ -92,7 +91,7 @@ fs.writeFileSync(process.argv[7], JSON.stringify(state, null, 2) + '\n');
   "$POOL_PDA" "$LEGACY_COMMIT" "$STATE_PATH"
 
 echo
-echo "✓ Wrote state: $STATE_PATH"
+say_ok "Wrote state: $STATE_PATH"
 echo "  Program ID: $PROGRAM_ID"
 echo "  Pool PDA:   $POOL_PDA"
 echo "  Explorer:   https://explorer.solana.com/address/${PROGRAM_ID}?cluster=devnet"

@@ -10,6 +10,7 @@ import {
 } from "@solana/web3.js";
 import * as fs from "fs";
 import { VerifyState, applyClusterEnv } from "./state";
+import * as ui from "./ui";
 
 export function readKeypair(filePath: string): Keypair {
   const raw = JSON.parse(fs.readFileSync(filePath, "utf8")) as number[];
@@ -91,7 +92,9 @@ export async function assertPoolSize(
       `${label}: pool size is ${info.data.length}, expected ${expected}`
     );
   }
-  console.log(`✓ ${label}: pool size is ${info.data.length} bytes`);
+  ui.ok(
+    `${label}: pool size is ${ui.color.bold(String(info.data.length))} bytes`
+  );
 }
 
 export function loadIdl(idlPath: string): Idl {

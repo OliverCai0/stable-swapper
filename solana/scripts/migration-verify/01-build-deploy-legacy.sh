@@ -19,9 +19,8 @@ if [[ "$KP_ID" != "$PROGRAM_ID" ]]; then
   exit 1
 fi
 
-echo "============================================================"
-echo "01 — BUILD + DEPLOY LEGACY ($LEGACY_COMMIT) [$MIGRATION_VERIFY_CLUSTER]"
-echo "============================================================"
+banner "01 — BUILD + DEPLOY LEGACY ($LEGACY_COMMIT) [$MIGRATION_VERIFY_CLUSTER]" \
+  "the pre-RBAC binary, so the migration has something real to migrate"
 echo "- Program ID: $PROGRAM_ID"
 echo "- RPC:        $RPC_URL"
 echo
@@ -60,7 +59,7 @@ if grep -q '\[programs.devnet\]' "$LEGACY_SOLANA/Anchor.toml"; then
     "$PROGRAM_ID" \
     "devnet"
 fi
-echo "✓ Aligned legacy worktree program ID"
+say_ok "Aligned legacy worktree program ID"
 
 echo "Building legacy program (this may take a minute)..."
 (
@@ -75,7 +74,7 @@ cp "$LEGACY_SOLANA/target/deploy/stable_swapper.so" \
   "$ARTIFACTS_LEGACY/stable_swapper.so"
 cp "$LEGACY_SOLANA/target/idl/stable_swapper.json" \
   "$ARTIFACTS_LEGACY/stable_swapper.json"
-echo "✓ Copied legacy artifacts to $ARTIFACTS_LEGACY"
+say_ok "Copied legacy artifacts to $ARTIFACTS_LEGACY"
 
 echo "Deploying legacy program to $MIGRATION_VERIFY_CLUSTER..."
 solana program deploy \
@@ -96,5 +95,5 @@ fs.writeFileSync(p, JSON.stringify(s, null, 2) + '\n');
 " "$STATE_PATH" "$LEGACY_COMMIT"
 
 echo
-echo "✓ Legacy program deployed."
+say_ok "Legacy program deployed."
 echo "Next: yarn ts-node scripts/migration-verify/02-seed-legacy-pool.ts"

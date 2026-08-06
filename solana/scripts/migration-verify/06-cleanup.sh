@@ -18,15 +18,14 @@ for arg in "$@"; do
   esac
 done
 
-echo "============================================================"
-echo "06 — CLEANUP [$MIGRATION_VERIFY_CLUSTER]"
-echo "============================================================"
+banner "06 — CLEANUP [$MIGRATION_VERIFY_CLUSTER]" \
+  "restore committed program ID pins"
 
 cd "$REPO_ROOT"
 git checkout -- \
   solana/programs/stable-swapper/src/lib.rs \
   solana/Anchor.toml
-echo "✓ Restored declare_id! and Anchor.toml"
+say_ok "Restored declare_id! and Anchor.toml"
 
 if [[ -d "$LEGACY_WORKTREE" ]]; then
   git worktree remove --force "$LEGACY_WORKTREE" 2>/dev/null || rm -rf "$LEGACY_WORKTREE"
@@ -67,4 +66,4 @@ else
 fi
 
 echo
-echo "✓ Cleanup complete."
+say_ok "Cleanup complete."

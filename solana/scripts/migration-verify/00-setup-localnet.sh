@@ -13,12 +13,10 @@ if [[ ! -f "$WALLET_PATH" ]]; then
   exit 1
 fi
 
-echo "============================================================"
-echo "00 — SETUP LOCALNET MIGRATION VERIFY"
-echo "============================================================"
-echo "- Solana dir: $SOLANA_DIR"
-echo "- Wallet:     $WALLET_PATH"
-echo
+banner "00 — SETUP LOCALNET MIGRATION VERIFY" \
+  "ephemeral program ID, local validator, funded wallet"
+say_info "Solana dir: $SOLANA_DIR"
+say_info "Wallet:     $WALLET_PATH"
 
 # Ephemeral program keypair (stable path + deploy copy).
 solana-keygen new --no-bip39-passphrase --silent --force \
@@ -27,11 +25,11 @@ cp "$STABLE_PROGRAM_KEYPAIR" "$DEPLOY_KEYPAIR"
 # Legacy path used by older mid-run artifacts.
 cp "$STABLE_PROGRAM_KEYPAIR" "$VERIFY_DIR/stable_swapper-keypair.json"
 PROGRAM_ID="$(solana address -k "$STABLE_PROGRAM_KEYPAIR")"
-echo "✓ Ephemeral program ID: $PROGRAM_ID"
+say_ok "Ephemeral program ID: $PROGRAM_ID"
 
 # Patch only localnet pins in the working tree (restored by 06-cleanup).
 patch_program_id "$LIB_RS" "$ANCHOR_TOML" "$PROGRAM_ID" "localnet"
-echo "✓ Patched declare_id! and [programs.localnet]"
+say_ok "Patched declare_id! and [programs.localnet]"
 
 # Start a dedicated local validator if one is not already reachable.
 # Note: Agave 3.1.x test-validator has no --enable-rpc-transaction-history flag.
@@ -86,7 +84,7 @@ for _ in 1 2 3 4 5; do
   sleep 0.5
 done
 BAL="$(solana balance "$WALLET_PUB" --url "$LOCALNET_URL" | awk '{print $1}')"
-echo "✓ Wallet balance: ${BAL} SOL"
+say_ok "Wallet balance: ${BAL} SOL"
 
 POOL_PDA="$(node -e "
   const {PublicKey}=require('@solana/web3.js');
@@ -121,7 +119,7 @@ fs.writeFileSync(process.argv[8], JSON.stringify(state, null, 2) + '\n');
   "$POOL_PDA" "$LEGACY_COMMIT" "$VALIDATOR_PID" "$STATE_PATH"
 
 echo
-echo "✓ Wrote state: $STATE_PATH"
+say_ok "Wrote state: $STATE_PATH"
 echo "  Program ID: $PROGRAM_ID"
 echo "  Pool PDA:   $POOL_PDA"
 echo

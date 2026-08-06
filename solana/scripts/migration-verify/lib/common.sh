@@ -23,6 +23,33 @@ LOCALNET_URL="http://127.0.0.1:8899"
 DEVNET_URL="https://api.devnet.solana.com"
 SOLANA_RELEASES_DIR="${HOME}/.local/share/solana/install/releases"
 
+# Colour only when stdout is a terminal and NO_COLOR is unset, so piped runs stay plain.
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET=""; C_BOLD=""; C_DIM=""
+  C_RED=""; C_GREEN=""; C_YELLOW=""; C_CYAN=""
+fi
+
+banner() {
+  local title="$1" subtitle="${2:-}"
+  printf '\n%s╔%s╗%s\n' "$C_CYAN" "$(printf '═%.0s' {1..64})" "$C_RESET"
+  printf '%s║%s  %s%-62s%s%s║%s\n' \
+    "$C_CYAN" "$C_RESET" "$C_BOLD" "$title" "$C_RESET" "$C_CYAN" "$C_RESET"
+  if [[ -n "$subtitle" ]]; then
+    printf '%s║%s  %s%-62s%s%s║%s\n' \
+      "$C_CYAN" "$C_RESET" "$C_DIM" "$subtitle" "$C_RESET" "$C_CYAN" "$C_RESET"
+  fi
+  printf '%s╚%s╝%s\n' "$C_CYAN" "$(printf '═%.0s' {1..64})" "$C_RESET"
+}
+
+say_ok()   { printf '  %s✔%s %s\n' "$C_GREEN" "$C_RESET" "$1"; }
+say_info() { printf '  %sℹ%s %s\n' "$C_CYAN" "$C_RESET" "$1"; }
+say_warn() { printf '  %s▲%s %s\n' "$C_YELLOW" "$C_RESET" "$1"; }
+say_fail() { printf '  %s✘%s %s\n' "$C_RED" "$C_RESET" "$1"; }
+say_step() { printf '\n%s▸ %s%s\n' "$C_BOLD$C_CYAN" "$1" "$C_RESET"; }
+
 # Resolve cluster: explicit env, else prefer sole existing state file, else localnet.
 resolve_cluster() {
   local c="${MIGRATION_VERIFY_CLUSTER:-}"

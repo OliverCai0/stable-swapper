@@ -41,6 +41,7 @@ import {
   vaultPdas,
   writeKeypair,
 } from "./lib/common";
+import * as ui from "./lib/ui";
 
 const DEMO_MINT_DECIMALS = 6;
 /**
@@ -63,6 +64,13 @@ const GROUPS: [Group, string][] = [
   ["cold", "Cold keys — quorum-gated actions"],
   ["pool", "Pool behaviour"],
 ];
+
+const BADGES: Record<Group, string> = {
+  "hot-allowed": ui.color.yellow("[  HOT   ]"),
+  "hot-blocked": ui.color.magenta("[ BLOCKED]"),
+  cold: ui.color.cyan("[  COLD  ]"),
+  pool: ui.color.blue("[  POOL  ]"),
+};
 
 interface CheckResult {
   group: Group;
@@ -117,24 +125,41 @@ async function main() {
   const mintA = new PublicKey(state.mintA);
   const mintB = new PublicKey(state.mintB);
 
-  console.log("=".repeat(60));
-  console.log("05 — AUTHORITY SMOKE + POST-MIGRATE SWAP");
-  console.log("=".repeat(60));
-  console.log("- Cluster:", state.cluster);
-  console.log("- Program ID:", programId.toBase58());
-  console.log("- Pool PDA:", pool.toBase58());
-  console.log();
-  console.log("Roles on the migrated pool:");
-  console.log(`  pause     (hot)  ${pause.publicKey.toBase58()}`);
-  console.log(`  treasury  (hot)  ${treasury.publicKey.toBase58()}`);
-  console.log(`  unpause   (cold) ${unpause.publicKey.toBase58()}`);
-  console.log(`  configure (cold) ${configure.publicKey.toBase58()}`);
-  console.log();
+  ui.banner(
+    "05 — AUTHORITY SMOKE + POST-MIGRATE SWAP",
+    "what each key class can and cannot do, proved on-chain"
+  );
+  ui.kv("Cluster", state.cluster);
+  ui.kv("Program ID", programId.toBase58());
+  ui.kv("Pool PDA", pool.toBase58());
 
+  ui.section("Roles on the migrated pool");
+  const roleLine = (
+    name: string,
+    klass: string,
+    key: PublicKey,
+    tint: (s: string) => string
+  ) =>
+    console.log(
+      `  ${tint("●")} ${name.padEnd(10)} ${tint(
+        klass.padEnd(5)
+      )} ${ui.color.dim(key.toBase58())}`
+    );
+  roleLine("pause", "hot", pause.publicKey, ui.color.yellow);
+  roleLine("treasury", "hot", treasury.publicKey, ui.color.yellow);
+  roleLine("unpause", "cold", unpause.publicKey, ui.color.cyan);
+  roleLine("configure", "cold", configure.publicKey, ui.color.cyan);
+  await ui.pace();
+
+  ui.section("Setup");
   await assertPoolSize(connection, pool, NEW_POOL_SIZE, "smoke start");
 
   const results: CheckResult[] = [];
   const smokeSignatures: SmokeSignatures = {};
+
+  function record(result: CheckResult): void {
+    results.push(result);
+  }
 
   async function allow(
     group: Group,
@@ -143,13 +168,17 @@ async function main() {
     key?: keyof SmokeSignatures,
     verify?: () => Promise<void>
   ): Promise<void> {
+    const label = `${BADGES[group]} ${name}`;
+    const progress = ui.spinner(`${label} ${ui.color.gray("…")}`);
     try {
       const sig = await run();
       if (key) smokeSignatures[key] = sig;
       if (verify) await verify();
-      results.push({ group, name, ok: true, signature: sig });
+      progress.succeed(label);
+      record({ group, name, ok: true, signature: sig });
     } catch (e) {
-      results.push({
+      progress.fail(`${label} ${ui.color.red("— unexpected failure")}`);
+      record({
         group,
         name,
         ok: false,
@@ -157,6 +186,7 @@ async function main() {
         signature: txSig(e),
       });
     }
+    await ui.pace(200);
   }
 
   async function deny(
@@ -167,10 +197,13 @@ async function main() {
     needles: string[],
     key?: keyof SmokeSignatures
   ): Promise<void> {
+    const label = `${BADGES[group]} ${name}`;
+    const progress = ui.spinner(`${label} ${ui.color.gray("…")}`);
     try {
       const sig = await run();
       if (key) smokeSignatures[key] = sig;
-      results.push({
+      progress.fail(`${label} ${ui.color.red("— it was ALLOWED")}`);
+      record({
         group,
         name,
         ok: false,
@@ -183,7 +216,12 @@ async function main() {
       const ok = needles.some((needle) => text.includes(needle));
       const sig = txSig(e);
       if (key) smokeSignatures[key] = sig;
-      results.push({
+      if (ok) {
+        progress.succeed(`${label} ${ui.color.magenta(`→ ${expected}`)}`);
+      } else {
+        progress.fail(`${label} ${ui.color.red("— wrong rejection reason")}`);
+      }
+      record({
         group,
         name,
         ok,
@@ -192,6 +230,7 @@ async function main() {
         signature: sig,
       });
     }
+    await ui.pace(200);
   }
 
   const poolState = async (): Promise<any> =>
@@ -296,8 +335,7 @@ async function main() {
     pool,
     demoMint
   );
-  console.log("- Demo mint to list:", demoMint.toBase58());
-  console.log();
+  ui.ok(`demo mint to list ${ui.color.dim(demoMint.toBase58())}`);
 
   /** `signer` stands in for the configure role; only the real one is accepted. */
   async function doListToken(signer: Keypair = configure): Promise<string> {
@@ -324,6 +362,9 @@ async function main() {
       .signers([signer])
       .rpc();
   }
+
+  ui.section("Live checks");
+  await ui.pace();
 
   // --- Hot pause key takes swaps offline; swap is rejected ---
   await allow(
@@ -662,26 +703,25 @@ async function main() {
     "postMigrateSwap"
   );
 
-  console.log();
-  console.log("Checklist:");
+  ui.banner("SUMMARY", "grouped by key class");
   let allOk = true;
   for (const [group, title] of GROUPS) {
     const inGroup = results.filter((r) => r.group === group);
     if (inGroup.length === 0) continue;
-    console.log();
-    console.log(`  ${title}`);
+    const passed = inGroup.filter((r) => r.ok).length;
+    const tally =
+      passed === inGroup.length
+        ? ui.color.green(`${passed}/${inGroup.length}`)
+        : ui.color.red(`${passed}/${inGroup.length}`);
+    ui.section(`${title}  ${tally}`);
     for (const r of inGroup) {
-      const mark = r.ok ? "PASS" : "FAIL";
-      const suffix = r.expected ? ` — rejected with ${r.expected}` : "";
-      console.log(`    [${mark}] ${r.name}${suffix}`);
-      console.log(
-        r.signature
-          ? `           sig: ${r.signature}`
-          : `           sig: (none — rejected in simulation)`
-      );
+      const mark = r.ok ? ui.color.green("✔") : ui.color.red("✘");
+      const suffix = r.expected ? ui.color.magenta(` → ${r.expected}`) : "";
+      console.log(`  ${mark} ${r.name}${suffix}`);
+      ui.signatureLine(r.signature);
       if (!r.ok) {
         allOk = false;
-        if (r.detail) console.log(`           ${summarize(r.detail)}`);
+        console.log(`    ${ui.color.red(summarize(r.detail ?? ""))}`);
       }
     }
   }
@@ -693,17 +733,28 @@ async function main() {
     demoMintKeypairPath: demoMintPath,
   });
 
-  console.log();
+  ui.blank();
   if (!allOk) {
-    console.error("❌ One or more smoke checks failed.");
+    console.log(
+      `  ${ui.color.red(ui.color.bold("One or more smoke checks failed."))}`
+    );
     process.exit(1);
   }
-  console.log("✓ All authority smoke checks passed.");
+  const blocked = results.filter(
+    (r) => r.group === "hot-blocked" && r.ok
+  ).length;
   console.log(
-    "✓ Every hot-key attempt at a value-moving config change was rejected on-chain."
+    `  ${ui.color.green(ui.color.bold(`All ${results.length} checks passed.`))}`
   );
-  console.log("✓ Signatures saved to state.smokeSignatures");
-  console.log("Next: bash scripts/migration-verify/06-cleanup.sh");
+  console.log(
+    `  ${ui.color.magenta(
+      ui.color.bold(
+        `${blocked} hot-key attempts at moving value were refused on-chain.`
+      )
+    )}`
+  );
+  ui.note("Signatures saved to state.smokeSignatures");
+  ui.note("Next: bash scripts/migration-verify/06-cleanup.sh");
 }
 
 async function ensureAta(

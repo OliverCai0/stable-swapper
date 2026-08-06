@@ -31,6 +31,7 @@ import {
   vaultPdas,
   writeKeypair,
 } from "./lib/common";
+import * as ui from "./lib/ui";
 
 const DECIMALS = 6;
 const FEE_RATE_BPS = 0;
@@ -49,21 +50,22 @@ async function main() {
   const idl = loadIdl(idlPath);
   const program = makeProgram(idl, provider, programId);
 
-  console.log("=".repeat(60));
-  console.log("02 — SEED LEGACY POOL");
-  console.log("=".repeat(60));
-  console.log("- Cluster:", state.cluster);
-  console.log("- Program ID:", programId.toBase58());
-  console.log("- Pool PDA:", pool.toBase58());
-  console.log("- Wallet:", payer.publicKey.toBase58());
-  console.log();
+  ui.banner(
+    "02 — SEED LEGACY POOL",
+    "a real pre-RBAC pool with tokens, liquidity, and a swap"
+  );
+  ui.kv("Cluster", state.cluster);
+  ui.kv("Program ID", programId.toBase58());
+  ui.kv("Pool PDA", pool.toBase58());
+  ui.kv("Wallet", payer.publicKey.toBase58());
+  ui.blank();
 
   // --- Initialize (legacy layout: ops + pause + fee_recipient) ---
   const existing = await connection.getAccountInfo(pool);
   if (existing) {
-    console.log("ℹ️  Pool already exists; skipping initialize.");
+    ui.info("Pool already exists; skipping initialize.");
   } else {
-    console.log("Initializing legacy pool...");
+    ui.section("Initialize legacy pool");
     const tx = await program.methods
       .initialize(new anchor.BN(FEE_RATE_BPS))
       .accounts({
@@ -75,7 +77,7 @@ async function main() {
         systemProgram: SystemProgram.programId,
       } as any)
       .rpc();
-    console.log("✓ Initialized. Signature:", tx);
+    ui.ok(`Initialized. Signature ${ui.color.dim(String(tx))}`);
   }
 
   await assertPoolSize(connection, pool, LEGACY_POOL_SIZE, "post-init");
@@ -92,11 +94,11 @@ async function main() {
   if (state.mintA && state.mintB) {
     mintA = new PublicKey(state.mintA);
     mintB = new PublicKey(state.mintB);
-    console.log("ℹ️  Reusing mints from state:");
-    console.log("  A:", mintA.toBase58());
-    console.log("  B:", mintB.toBase58());
+    ui.info("Reusing mints from state:");
+    ui.note(`A ${mintA.toBase58()}`);
+    ui.note(`B ${mintB.toBase58()}`);
   } else {
-    console.log("Creating mints...");
+    ui.section("Create mints");
     mintAKp = Keypair.generate();
     mintBKp = Keypair.generate();
     writeKeypair(mintAPath, mintAKp);
@@ -118,8 +120,8 @@ async function main() {
       DECIMALS,
       mintBKp
     );
-    console.log("✓ Mint A:", mintA.toBase58());
-    console.log("✓ Mint B:", mintB.toBase58());
+    ui.ok(`Mint A ${ui.color.dim(String(mintA.toBase58()))}`);
+    ui.ok(`Mint B ${ui.color.dim(String(mintB.toBase58()))}`);
   }
 
   const userAtaA = await getOrCreateAta(
@@ -152,7 +154,7 @@ async function main() {
     payer,
     units(USER_MINT_TOKENS)
   );
-  console.log(`✓ Minted ${USER_MINT_TOKENS} of each token to wallet ATAs`);
+  ui.ok(`Minted ${USER_MINT_TOKENS} of each token to wallet ATAs`);
 
   // --- Add supported tokens (legacy: operations_authority) ---
   for (const mint of [mintA, mintB]) {
@@ -177,13 +179,12 @@ async function main() {
     vaultAtaB,
     units(VAULT_FUND_TOKENS)
   );
-  console.log(`✓ Funded each vault with ${VAULT_FUND_TOKENS} tokens`);
+  ui.ok(`Funded each vault with ${VAULT_FUND_TOKENS} tokens`);
 
   await assertPoolSize(connection, pool, LEGACY_POOL_SIZE, "pre-swap");
 
   // --- Pre-upgrade swap A -> B ---
-  console.log();
-  console.log(`Swapping ${SWAP_TOKENS} of A -> B...`);
+  ui.section(`Pre-upgrade swap: ${SWAP_TOKENS} of A → B`);
   const amountIn = new anchor.BN((SWAP_TOKENS * 10 ** DECIMALS).toString());
   const minOut = new anchor.BN(
     (SWAP_TOKENS * 10 ** DECIMALS * 0.99).toString()
@@ -227,8 +228,8 @@ async function main() {
     .rpc();
   const balAfter = await getAccount(connection, userAtaB);
   const received = Number(balAfter.amount - balBefore.amount) / 10 ** DECIMALS;
-  console.log("✓ Pre-upgrade swap ok. Signature:", swapSig);
-  console.log(`  Received ~${received} of mint B`);
+  ui.ok(`Pre-upgrade swap ok. Signature ${ui.color.dim(String(swapSig))}`);
+  ui.note(`received ~${received} of mint B`);
 
   await assertPoolSize(connection, pool, LEGACY_POOL_SIZE, "post-swap");
 
@@ -249,8 +250,8 @@ async function main() {
   });
 
   console.log();
-  console.log("✓ Legacy pool seeded. State updated.");
-  console.log("Next: bash scripts/migration-verify/03-upgrade-to-current.sh");
+  ui.ok("Legacy pool seeded. State updated.");
+  ui.note("Next: bash scripts/migration-verify/03-upgrade-to-current.sh");
 }
 
 async function getOrCreateAta(
@@ -282,7 +283,7 @@ async function addTokenIfNeeded(
     t.equals(mint)
   );
   if (already) {
-    console.log(`ℹ️  Token already supported: ${mint.toBase58()}`);
+    ui.info(`Token already supported: ${mint.toBase58()}`);
     return;
   }
 
@@ -292,7 +293,7 @@ async function addTokenIfNeeded(
     payer.publicKey
   );
 
-  console.log(`Adding supported token ${mint.toBase58()}...`);
+  ui.info(`adding supported token ${mint.toBase58()}`);
   const tx = await program.methods
     .addSupportedToken()
     .accounts({
@@ -309,7 +310,7 @@ async function addTokenIfNeeded(
       rent: anchor.web3.SYSVAR_RENT_PUBKEY,
     } as any)
     .rpc();
-  console.log("✓ Added. Signature:", tx);
+  ui.ok(`Added. Signature ${ui.color.dim(String(tx))}`);
 }
 
 async function fundVault(

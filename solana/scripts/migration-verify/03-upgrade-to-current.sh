@@ -11,9 +11,8 @@ PROGRAM_ID="$(state_get programId)"
 POOL_PDA="$(state_get poolPda)"
 RPC_URL="$(state_get rpcUrl)"
 
-echo "============================================================"
-echo "03 — UPGRADE TO CURRENT PROGRAM [$MIGRATION_VERIFY_CLUSTER]"
-echo "============================================================"
+banner "03 — UPGRADE TO CURRENT PROGRAM [$MIGRATION_VERIFY_CLUSTER]" \
+  "new code, same program ID, pool untouched until migrate runs"
 echo "- Program ID: $PROGRAM_ID"
 echo "- Pool PDA:   $POOL_PDA"
 echo "- RPC:        $RPC_URL"
@@ -92,7 +91,7 @@ fs.writeFileSync(p, JSON.stringify(s, null, 2) + '\n');
 " "$STATE_PATH"
 
 echo
-echo "✓ Upgrade complete."
+say_ok "Upgrade complete."
 if [[ "$POOL_LEN" == "1719" ]]; then
   echo "Next: yarn ts-node scripts/migration-verify/04-migrate.ts"
 else

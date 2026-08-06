@@ -27,6 +27,7 @@ import {
   readUpgradeAuthority,
   writeKeypair,
 } from "./lib/common";
+import * as ui from "./lib/ui";
 
 async function main() {
   ensureVerifyDirs();
@@ -40,16 +41,18 @@ async function main() {
   const idl = loadIdl(idlPath);
   const program = makeProgram(idl, provider, programId);
 
-  console.log("=".repeat(60));
-  console.log("04 — MIGRATE AUTHORITIES");
-  console.log("=".repeat(60));
-  console.log("- Cluster:", state.cluster);
-  console.log("- Program ID:", programId.toBase58());
-  console.log("- Pool PDA:", pool.toBase58());
-  console.log("- ProgramData:", programData.toBase58());
-  console.log("- Signer (wallet):", payer.publicKey.toBase58());
-  console.log();
+  ui.banner(
+    "04 — MIGRATE AUTHORITIES",
+    "in-place realloc, gated on the program upgrade authority"
+  );
+  ui.kv("Cluster", state.cluster);
+  ui.kv("Program ID", programId.toBase58());
+  ui.kv("Pool PDA", pool.toBase58());
+  ui.kv("ProgramData", programData.toBase58());
+  ui.kv("Signer", payer.publicKey.toBase58());
+  await ui.pace();
 
+  ui.section("Authorisation");
   const upgradeAuthority = await readUpgradeAuthority(connection, programId);
   if (!upgradeAuthority) {
     throw new Error(
@@ -63,12 +66,13 @@ async function main() {
         `(${upgradeAuthority.toBase58()}). migrate_authorities would fail with NotUpgradeAuthority.`
     );
   }
-  console.log("✓ Wallet is the program upgrade authority");
-  console.log(
-    "  Legacy pool authorities are not consulted — hot keys cannot trigger a migration."
+  ui.ok("Wallet is the program upgrade authority");
+  ui.note(
+    "Legacy pool authorities are not consulted — hot keys cannot trigger a migration."
   );
-  console.log();
+  await ui.pace();
 
+  ui.section("Pre-migration state");
   await assertPoolSize(connection, pool, LEGACY_POOL_SIZE, "pre-migrate");
 
   const rolePaths: RoleKeyPaths = {
@@ -89,16 +93,32 @@ async function main() {
     stranger: Keypair.generate(),
   };
 
+  ui.section("New role keys");
   // Roles only sign; the wallet pays fees. No SOL top-up needed.
+  const roleClass: Record<keyof RoleKeyPaths, string> = {
+    pause: ui.color.yellow("hot "),
+    unpause: ui.color.cyan("cold"),
+    treasury: ui.color.yellow("hot "),
+    configure: ui.color.cyan("cold"),
+    withdrawRecipient: ui.color.gray("addr"),
+    stranger: ui.color.gray("addr"),
+  };
   for (const key of Object.keys(roles) as (keyof RoleKeyPaths)[]) {
     writeKeypair(rolePaths[key], roles[key]);
-    console.log(`✓ ${key}: ${roles[key].publicKey.toBase58()}`);
+    ui.ok(
+      `${roleClass[key]} ${key.padEnd(18)} ${ui.color.dim(
+        roles[key].publicKey.toBase58()
+      )}`
+    );
+    await ui.pace(120);
   }
-  console.log();
 
   // Negative case first: the pool is still legacy-sized, so a rejection here can only
   // come from the upgrade-authority gate rather than from an already-migrated account.
-  console.log("Checking that a non-upgrade-authority signer is rejected...");
+  ui.section("Guard check");
+  const guard = ui.spinner(
+    "Sending migrate_authorities from an unauthorised signer…"
+  );
   const impostor = Keypair.generate();
   try {
     await program.methods
@@ -117,22 +137,26 @@ async function main() {
       } as any)
       .signers([impostor])
       .rpc();
-    console.error("❌ migrate_authorities accepted an unauthorized signer");
+    guard.fail("migrate_authorities accepted an unauthorised signer");
     process.exit(1);
   } catch (e) {
     const text = errText(e);
     if (!text.includes("notupgradeauthority")) {
-      console.error(
-        "❌ Expected NotUpgradeAuthority, got:",
-        text.slice(0, 400)
-      );
+      guard.fail(`Expected NotUpgradeAuthority, got: ${text.slice(0, 300)}`);
       process.exit(1);
     }
-    console.log("✓ Rejected with NotUpgradeAuthority");
+    guard.succeed(
+      `Unauthorised signer rejected — ${ui.color.magenta(
+        "NotUpgradeAuthority"
+      )}`
+    );
   }
+  await ui.pace();
 
-  console.log();
-  console.log("Sending migrate_authorities...");
+  ui.section("Migration");
+  const migrating = ui.spinner(
+    "Sending migrate_authorities as the upgrade authority…"
+  );
   const sig = await program.methods
     .migrateAuthorities(
       roles.pause.publicKey,
@@ -148,13 +172,26 @@ async function main() {
       systemProgram: SystemProgram.programId,
     } as any)
     .rpc();
-  console.log("✓ Migrated. Signature:", sig);
+  migrating.succeed("Migrated");
+  ui.signatureLine(sig);
 
   await assertPoolSize(connection, pool, NEW_POOL_SIZE, "post-migrate");
+  ui.blank();
   console.log(
-    `✓ Grew ${NEW_POOL_SIZE - LEGACY_POOL_SIZE} bytes in place — same PDA ` +
-      `${pool.toBase58()}, no new account, no pool redeploy`
+    `    ${ui.color.gray(String(LEGACY_POOL_SIZE))} ${ui.growthBar(
+      LEGACY_POOL_SIZE,
+      NEW_POOL_SIZE
+    )} ${ui.color.bold(String(NEW_POOL_SIZE))} bytes  ${ui.color.yellow(
+      `+${NEW_POOL_SIZE - LEGACY_POOL_SIZE}`
+    )}`
   );
+  ui.note(
+    `grown in place at the same PDA ${pool.toBase58()} — no new account, no pool redeploy`
+  );
+  ui.blank();
+  await ui.pace();
+
+  ui.section("Post-migration verification");
 
   const poolAccount: any = await (program.account as any).liquidityPool.fetch(
     pool
@@ -180,13 +217,12 @@ async function main() {
   let failed = false;
   for (const [name, actual, want] of checks) {
     if (!actual.equals(want)) {
-      console.error(
-        `❌ ${name} = ${actual.toBase58()}, expected ${want.toBase58()}`
-      );
+      ui.fail(`${name} = ${actual.toBase58()}, expected ${want.toBase58()}`);
       failed = true;
     } else {
-      console.log(`✓ ${name} ok`);
+      ui.ok(`${name.padEnd(20)} ${ui.color.dim(actual.toBase58())}`);
     }
+    await ui.pace(120);
   }
 
   if (
@@ -202,19 +238,17 @@ async function main() {
     );
     failed = true;
   } else {
-    console.log("✓ withdraw_recipients seeded");
+    ui.ok("withdraw_recipients seeded");
   }
 
   const feeRecipient = new PublicKey(
     state.feeRecipient ?? payer.publicKey.toBase58()
   );
   if (!poolAccount.feeRecipient.equals(feeRecipient)) {
-    console.error(
-      `❌ fee_recipient drifted: ${poolAccount.feeRecipient.toBase58()}`
-    );
+    ui.fail(`fee_recipient drifted: ${poolAccount.feeRecipient.toBase58()}`);
     failed = true;
   } else {
-    console.log("✓ fee_recipient preserved");
+    ui.ok("fee_recipient preserved");
   }
 
   if (state.mintA && state.mintB) {
@@ -223,22 +257,24 @@ async function main() {
     );
     for (const mint of [state.mintA, state.mintB]) {
       if (!tokens.includes(mint)) {
-        console.error(`❌ supported_tokens missing ${mint}`);
+        ui.fail(`supported_tokens missing ${mint}`);
         failed = true;
       }
     }
-    if (!failed) console.log("✓ supported_tokens preserved");
+    if (!failed) {
+      ui.ok(`supported_tokens preserved (${tokens.length} listed)`);
+    }
   }
 
   if (poolAccount.feeRate.toNumber() !== (state.feeRateBps ?? 0)) {
-    console.error(
-      `❌ fee_rate = ${poolAccount.feeRate.toNumber()}, expected ${
+    ui.fail(
+      `fee_rate = ${poolAccount.feeRate.toNumber()}, expected ${
         state.feeRateBps ?? 0
       }`
     );
     failed = true;
   } else {
-    console.log("✓ fee_rate preserved");
+    ui.ok("fee_rate preserved");
   }
 
   if (failed) {
@@ -251,9 +287,9 @@ async function main() {
     phase: "04-migrated",
   });
 
-  console.log();
-  console.log("✓ Migration verified.");
-  console.log(
+  ui.blank();
+  console.log(`  ${ui.color.green(ui.color.bold("Migration verified."))}`);
+  ui.note(
     "Next: yarn ts-node scripts/migration-verify/05-smoke-authorities.ts"
   );
 }
