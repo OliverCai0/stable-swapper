@@ -39,6 +39,9 @@ pub mod stable_swapper {
             "configure_authority",
             &ctx.accounts.configure_authority.key(),
         )?;
+        // Same zero-key rule `update_fee_recipient` applies, so a pool cannot start out in a
+        // state that instruction would refuse to set.
+        require_authority_set("fee_recipient", &ctx.accounts.fee_recipient.key())?;
 
         let pool = &mut ctx.accounts.pool;
         pool.pause_authority = ctx.accounts.pause_authority.key();
@@ -361,6 +364,9 @@ pub mod stable_swapper {
         ctx: Context<UpdateFeeConfig>,
         fee_recipient: Pubkey,
     ) -> Result<()> {
+        // The recipient is the ATA authority for every fee transfer, so the default pubkey would
+        // silently send fees to a token account that nothing can sign for.
+        require_authority_set("fee_recipient", &fee_recipient)?;
         ctx.accounts.pool.fee_recipient = fee_recipient;
         msg!("Updated fee recipient to: {}", fee_recipient);
         Ok(())
@@ -489,12 +495,14 @@ pub mod stable_swapper {
     }
 }
 
-/// Rejects the default pubkey as a role holder. Roles can only be rotated by their current
-/// holder, so the zero key is a one-way door: no signature exists for it. `role` names the
-/// offending field, since a bare key comparison logs the same zero key on both sides.
-fn require_authority_set(role: &str, authority: &Pubkey) -> Result<()> {
-    if *authority == Pubkey::default() {
-        msg!("Role {} must not be set to the default pubkey", role);
+/// Rejects the default pubkey for a key stored on the pool. Roles can only be rotated by their
+/// current holder, so a zero-key role is a one-way door: no signature exists for it. The fee
+/// recipient is recoverable by comparison, but a zero key there routes every fee to a token
+/// account nobody can sign for. `field` names the offending key, since a bare comparison logs
+/// the same zero key on both sides.
+fn require_authority_set(field: &str, key: &Pubkey) -> Result<()> {
+    if *key == Pubkey::default() {
+        msg!("{} must not be set to the default pubkey", field);
         return err!(LiquidityError::AuthorityNotSet);
     }
     Ok(())

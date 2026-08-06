@@ -2098,6 +2098,31 @@ describe("stable-swapper", () => {
         .signers([configureAuthority.payer])
         .rpc();
     });
+
+    it("Fails to set the fee recipient to the default pubkey", async () => {
+      // The recipient is the authority on the token account every fee lands in, so the zero
+      // key would make collected fees permanently unspendable.
+      try {
+        await program.methods
+          .updateFeeRecipient(PublicKey.default)
+          .accounts({
+            pool,
+            configureAuthority: configureAuthority.publicKey,
+          })
+          .signers([configureAuthority.payer])
+          .rpc();
+        assert.fail("Expected AuthorityNotSet error");
+      } catch (error) {
+        assert.include(error.toString().toLowerCase(), "authoritynotset");
+      }
+
+      const poolAccount = await program.account.liquidityPool.fetch(pool);
+      assert.notEqual(
+        poolAccount.feeRecipient.toBase58(),
+        PublicKey.default.toBase58(),
+        "fee recipient must be unchanged by a rejected update"
+      );
+    });
   });
 
   describe("Decimal Normalization", () => {

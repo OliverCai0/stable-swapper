@@ -5,7 +5,7 @@ A production-ready Solana-based liquidity management system designed for secure,
 ## 🏗️ Key Features
 
 - ✅ **1:1 Token Swaps**: Guaranteed parity swapping between supported stablecoins
-- ✅ **Role-Based Authority Model**: Four in-program roles split between SCM cold and CCS hot keys (Pause, Unpause, Treasury, Configure)
+- ✅ **Role-Based Authority Model**: Four in-program roles split between cold and hot keys (Pause, Unpause, Treasury, Configure)
 - ✅ **Withdraw Recipient Allowlist**: `withdraw_liquidity` can only target a token account owned by an allowlisted address; the allowlist is managed by the cold-key Configure Authority
 - ✅ **Slippage Protection**: User-defined minimum output amounts prevent unexpected losses
 - ✅ **Granular Pause Controls**: Independent pause flags for swaps, withdraws, and per-token; pausing is hot, unpausing is cold
@@ -157,10 +157,10 @@ The system is configured for **Solana Devnet** by default. To change networks:
 
 | Role | Key class | Permissions |
 | --- | --- | --- |
-| Pause Authority | CCS hot | `pause_swaps`, `pause_withdraws`, `pause_token` |
-| Unpause Authority | SCM cold | `unpause_swaps`, `unpause_withdraws`, `unpause_token` |
-| Treasury Authority | CCS hot | `withdraw_liquidity` (recipient must be on `withdraw_recipients` allowlist) |
-| Configure Authority | SCM cold | `add_supported_token`, `remove_supported_token`, `update_fee_rate`, `update_fee_recipient`, `add_withdraw_recipient`, `remove_withdraw_recipient` |
+| Pause Authority | hot | `pause_swaps`, `pause_withdraws`, `pause_token` |
+| Unpause Authority | cold | `unpause_swaps`, `unpause_withdraws`, `unpause_token` |
+| Treasury Authority | hot | `withdraw_liquidity` (recipient must be on `withdraw_recipients` allowlist) |
+| Configure Authority | cold | `add_supported_token`, `remove_supported_token`, `update_fee_rate`, `update_fee_recipient`, `add_withdraw_recipient`, `remove_withdraw_recipient` |
 | Each role | (self) | `update_<role>_authority` (strict self-rotation) |
 
 The on-chain program upgrade authority is held by the BPF loader (rotate via `solana program set-upgrade-authority`) and is independent from the in-program roles above. It cannot exercise any of them, but it is the only key that can run the two pool-lifecycle instructions: `initialize` and `migrate_authorities` both require the payer to be the current upgrade authority. This is not extra privilege — a key that can deploy new bytecode to this program ID can already rewrite the pool account however it likes — but it does mean the upgrade authority alone can seed or redistribute every role, so it must be held to the same standard as the cold keys it assigns.
@@ -172,7 +172,7 @@ The on-chain program upgrade authority is held by the BPF loader (rotate via `so
 - **`add_supported_token` / `remove_supported_token`**: Configure Authority manages supported tokens
 - **`swap`**: Executes 1:1 swaps with slippage protection (`min_amount_out`)
 - **`withdraw_liquidity`**: Treasury Authority withdraws to a token account whose owner is on the `withdraw_recipients` allowlist
-- **`update_fee_rate` / `update_fee_recipient`**: Configure Authority updates the fee rate (basis points) and the fee recipient independently
+- **`update_fee_rate` / `update_fee_recipient`**: Configure Authority updates the fee rate (basis points) and the fee recipient independently. The fee recipient cannot be set to the default pubkey, at creation or afterwards, since it is the token-account authority every fee is transferred to
 - **`add_withdraw_recipient` / `remove_withdraw_recipient`**: Configure Authority manages the withdraw allowlist (up to 10 entries)
 - **`pause_swaps` / `pause_withdraws` / `pause_token`**: Pause Authority puts the corresponding flag in the paused state
 - **`unpause_swaps` / `unpause_withdraws` / `unpause_token`**: Unpause Authority clears the flag
@@ -184,7 +184,7 @@ Liquidity is seeded by sending tokens directly to the vault token account via an
 
 ### Access Controls
 - **Deploy-gated lifecycle**: `initialize` and `migrate_authorities` are restricted to the program upgrade authority. The pool PDA has a fixed seed and no instruction can close it, so the first successful `initialize` claims the only pool a deployment will ever have; gating it removes the griefing window between deploy and initialize, whose only other remedy is redeploying at a new program ID. Note both instructions stop working once the program is made immutable
-- **Four-role model**: Pause/Unpause/Treasury/Configure split across SCM cold and CCS hot keys
+- **Four-role model**: Pause/Unpause/Treasury/Configure split across cold and hot keys
 - **Strict self-rotation**: Each role rotates only itself; no role can take over another
 - **Withdraw recipient allowlist**: `withdraw_liquidity` recipient must be a token account whose owner is on `pool.withdraw_recipients`; only the cold-key Configure Authority can add or remove entries, so a compromised hot Treasury key cannot redirect funds to a new address
 - **Pausing is hot, unpausing is cold**: A compromised hot key can pause but cannot resume operations

@@ -180,6 +180,7 @@ describe("initialize role guards (bankrun)", () => {
     ["unpauseAuthority", "authoritynotset"],
     ["treasuryAuthority", "authoritynotset"],
     ["configureAuthority", "authoritynotset"],
+    ["feeRecipient", "authoritynotset"],
     ["withdrawRecipient", "withdrawrecipientnotset"],
   ];
 
