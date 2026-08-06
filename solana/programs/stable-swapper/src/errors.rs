@@ -68,8 +68,8 @@ pub enum LiquidityError {
     MigrationSerializeFailed,
     #[msg("Authority key must not be the default pubkey")]
     AuthorityNotSet,
-    #[msg("Signer does not match the legacy operations authority stored in the pool")]
-    LegacyOperationsAuthorityMismatch,
-    #[msg("Signer does not match the legacy pause authority stored in the pool")]
-    LegacyPauseAuthorityMismatch,
+    #[msg("Program data account does not belong to this program")]
+    InvalidProgramData,
+    #[msg("Payer is not the program upgrade authority")]
+    NotUpgradeAuthority,
 }

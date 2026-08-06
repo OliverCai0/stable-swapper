@@ -163,12 +163,12 @@ The system is configured for **Solana Devnet** by default. To change networks:
 | Configure Authority | SCM cold | `add_supported_token`, `remove_supported_token`, `update_fee_rate`, `update_fee_recipient`, `add_withdraw_recipient`, `remove_withdraw_recipient` |
 | Each role | (self) | `update_<role>_authority` (strict self-rotation) |
 
-The on-chain program upgrade authority is held by the BPF loader (rotate via `solana program set-upgrade-authority`) and is independent from the in-program roles above.
+The on-chain program upgrade authority is held by the BPF loader (rotate via `solana program set-upgrade-authority`) and is independent from the in-program roles above. It cannot exercise any of them, but it is the only key that can run the two pool-lifecycle instructions: `initialize` and `migrate_authorities` both require the payer to be the current upgrade authority. This is not extra privilege — a key that can deploy new bytecode to this program ID can already rewrite the pool account however it likes — but it does mean the upgrade authority alone can seed or redistribute every role, so it must be held to the same standard as the cold keys it assigns.
 
 ### Core Instructions
 
-- **`initialize`**: Creates pool with the four role authorities, fee recipient, and a withdraw allowlist seeded with one recipient
-- **`migrate_authorities`**: One-shot migration of an existing legacy pool to the role-based layout (co-signed by current `operations_authority` + `pause_authority`); seeds the withdraw allowlist with the provided recipient. Invoked by internal migration tooling, not by in-repo CLIs.
+- **`initialize`**: Creates pool with the four role authorities, fee recipient, and a withdraw allowlist seeded with one recipient. Restricted to the program's upgrade authority: takes the program's `ProgramData` account (the BPF upgradeable loader PDA seeded by the program ID) and requires `upgrade_authority_address == payer`, so deploy and initialize are performed by the same key
+- **`migrate_authorities`**: One-shot migration of an existing legacy pool to the role-based layout; seeds the withdraw allowlist with the provided recipient. Restricted to the program's upgrade authority on the same `ProgramData` check as `initialize`; the legacy `operations_authority` and `pause_authority` stored in the pool are overwritten and are not consulted. Invoked by internal migration tooling, not by in-repo CLIs.
 - **`add_supported_token` / `remove_supported_token`**: Configure Authority manages supported tokens
 - **`swap`**: Executes 1:1 swaps with slippage protection (`min_amount_out`)
 - **`withdraw_liquidity`**: Treasury Authority withdraws to a token account whose owner is on the `withdraw_recipients` allowlist
@@ -183,6 +183,7 @@ Liquidity is seeded by sending tokens directly to the vault token account via an
 ## 🔐 Security Features
 
 ### Access Controls
+- **Deploy-gated lifecycle**: `initialize` and `migrate_authorities` are restricted to the program upgrade authority. The pool PDA has a fixed seed and no instruction can close it, so the first successful `initialize` claims the only pool a deployment will ever have; gating it removes the griefing window between deploy and initialize, whose only other remedy is redeploying at a new program ID. Note both instructions stop working once the program is made immutable
 - **Four-role model**: Pause/Unpause/Treasury/Configure split across SCM cold and CCS hot keys
 - **Strict self-rotation**: Each role rotates only itself; no role can take over another
 - **Withdraw recipient allowlist**: `withdraw_liquidity` recipient must be a token account whose owner is on `pool.withdraw_recipients`; only the cold-key Configure Authority can add or remove entries, so a compromised hot Treasury key cannot redirect funds to a new address

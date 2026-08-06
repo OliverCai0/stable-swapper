@@ -15,6 +15,10 @@ import {
 } from "@solana/spl-token";
 import { assert } from "chai";
 
+const BPF_LOADER_UPGRADEABLE_PROGRAM_ID = new PublicKey(
+  "BPFLoaderUpgradeab1e11111111111111111111111"
+);
+
 describe("stable-swapper", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
@@ -32,6 +36,7 @@ describe("stable-swapper", () => {
   let usdcMint: PublicKey;
   let customStableMint: PublicKey;
   let pool: PublicKey;
+  let programData: PublicKey;
   let usdcVault: PublicKey;
   let customStableVault: PublicKey;
   let usdcVaultTokenAccount: PublicKey;
@@ -67,6 +72,13 @@ describe("stable-swapper", () => {
     [pool] = PublicKey.findProgramAddressSync(
       [Buffer.from("liquidity_pool")],
       program.programId
+    );
+
+    // `initialize` requires the payer to be the program's upgrade authority. Anchor deploys the
+    // program with the provider wallet as that authority, and the provider wallet is `payer`.
+    [programData] = PublicKey.findProgramAddressSync(
+      [program.programId.toBuffer()],
+      BPF_LOADER_UPGRADEABLE_PROGRAM_ID
     );
 
     [usdcVault] = PublicKey.findProgramAddressSync(
@@ -147,6 +159,7 @@ describe("stable-swapper", () => {
         .accounts({
           pool,
           payer: payer.publicKey,
+          programData,
           pauseAuthority: pauseAuthority.publicKey,
           unpauseAuthority: unpauseAuthority.publicKey,
           treasuryAuthority: treasuryAuthority.publicKey,
@@ -3494,8 +3507,8 @@ describe("stable-swapper", () => {
           )
           .accounts({
             pool,
-            legacyOperationsAuthority: payer.publicKey,
-            legacyPauseAuthority: payer.publicKey,
+            payer: payer.publicKey,
+            programData,
             systemProgram: SystemProgram.programId,
           })
           .signers([payer.payer])

@@ -60,8 +60,10 @@ pub mod stable_swapper {
     }
 
     /// One-shot migration from the legacy `(operations_authority, pause_authority)` layout
-    /// to the new role-based layout. Co-signed by both legacy authorities so neither key alone
-    /// can unilaterally redistribute roles.
+    /// to the new role-based layout. Gated on the program upgrade authority rather than on the
+    /// legacy authorities stored in the pool: the upgrade authority can already rewrite this
+    /// account by deploying new code, so it is the key that ultimately governs the migration,
+    /// and routing through it keeps the legacy hot keys out of the operation.
     ///
     /// The pool grows from the legacy layout to `LiquidityPool::INIT_SPACE` (extra role keys
     /// plus the withdraw-recipient allowlist slot). The legacy account is opened as
@@ -78,8 +80,7 @@ pub mod stable_swapper {
     ) -> Result<()> {
         do_migrate_authorities(
             &ctx.accounts.pool.to_account_info(),
-            &ctx.accounts.legacy_operations_authority.to_account_info(),
-            &ctx.accounts.legacy_pause_authority.to_account_info(),
+            &ctx.accounts.payer.to_account_info(),
             &ctx.accounts.system_program.to_account_info(),
             new_pause_authority,
             new_unpause_authority,
@@ -499,21 +500,20 @@ fn require_authority_set(role: &str, authority: &Pubkey) -> Result<()> {
     Ok(())
 }
 
-/// Shared body for `migrate_authorities`: legacy parse, signer match, realloc, rent top-up,
-/// re-serialize. The Accounts struct on the calling instruction is responsible for verifying
-/// the pool address (the canonical PDA).
+/// Shared body for `migrate_authorities`: legacy parse, realloc, rent top-up, re-serialize.
+/// The Accounts struct on the calling instruction is responsible for verifying the pool address
+/// (the canonical PDA) and that the caller is the program upgrade authority.
 ///
 /// Rent: the pool grows by `LiquidityPool::MIGRATION_GROWTH` bytes (the two extra role keys
-/// plus the withdraw-recipient allowlist), and `legacy_operations_authority_ai` pays the
-/// difference through a `system_program::transfer` CPI. It must therefore be a system-owned
-/// account holding enough lamports (~0.0027 SOL at the current rent rate). When the pool PDA
-/// already holds `Rent::minimum_balance` for the new size the top-up is skipped entirely and no
-/// lamports are needed, which is the way to migrate when the legacy operations authority is a
-/// program-owned account that cannot be debited by the system program.
+/// plus the withdraw-recipient allowlist), and `payer_ai` pays the difference through a
+/// `system_program::transfer` CPI. It must therefore be a system-owned account holding enough
+/// lamports (~0.0027 SOL at the current rent rate). When the pool PDA already holds
+/// `Rent::minimum_balance` for the new size the top-up is skipped entirely and no lamports are
+/// needed, which is the way to migrate when the upgrade authority is a program-owned account
+/// (a multisig PDA, say) that cannot be debited by the system program.
 fn do_migrate_authorities<'info>(
     pool_ai: &AccountInfo<'info>,
-    legacy_operations_authority_ai: &AccountInfo<'info>,
-    legacy_pause_authority_ai: &AccountInfo<'info>,
+    payer_ai: &AccountInfo<'info>,
     system_program_ai: &AccountInfo<'info>,
     new_pause_authority: Pubkey,
     new_unpause_authority: Pubkey,
@@ -556,26 +556,17 @@ fn do_migrate_authorities<'info>(
     );
 
     // Snapshot legacy fields with a scoped borrow so we can drop it before realloc.
-    let (
-        legacy_ops,
-        legacy_pause,
-        legacy_fee_recipient,
-        supported_tokens,
-        fee_rate,
-        swaps_paused,
-        liquidity_paused,
-        bump,
-    ) = {
+    let (legacy_fee_recipient, supported_tokens, fee_rate, swaps_paused, liquidity_paused, bump) = {
         let data = pool_ai.try_borrow_data()?;
         require!(
             &data[..8] == LiquidityPool::DISCRIMINATOR,
             LiquidityError::LegacyDiscriminatorMismatch
         );
 
+        // Bytes 8..72 hold the legacy operations and pause authorities. Both are superseded by
+        // the role keys passed to this instruction, so they are skipped rather than read.
         // `Pubkey::try_from` on a 32-byte slice is infallible; the slice length is fixed
         // here by construction, so unwrap is safe.
-        let legacy_ops = Pubkey::try_from(&data[8..40]).unwrap();
-        let legacy_pause = Pubkey::try_from(&data[40..72]).unwrap();
         let legacy_fee_recipient = Pubkey::try_from(&data[72..104]).unwrap();
 
         // supported_tokens vec: 4-byte length + 32-byte pubkeys, max-allocated to MAX_SUPPORTED_TOKENS
@@ -600,8 +591,6 @@ fn do_migrate_authorities<'info>(
         let bump = data[trailing + 10];
 
         (
-            legacy_ops,
-            legacy_pause,
             legacy_fee_recipient,
             tokens,
             fee_rate,
@@ -610,18 +599,6 @@ fn do_migrate_authorities<'info>(
             bump,
         )
     };
-
-    // Verify both legacy signers match the on-chain values.
-    require_keys_eq!(
-        *legacy_operations_authority_ai.key,
-        legacy_ops,
-        LiquidityError::LegacyOperationsAuthorityMismatch
-    );
-    require_keys_eq!(
-        *legacy_pause_authority_ai.key,
-        legacy_pause,
-        LiquidityError::LegacyPauseAuthorityMismatch
-    );
 
     // Top up rent for the additional `LiquidityPool::MIGRATION_GROWTH` bytes, then grow the
     // account. This is a no-op when the pool already holds the new minimum balance.
@@ -633,7 +610,7 @@ fn do_migrate_authorities<'info>(
             CpiContext::new(
                 system_program_ai.clone(),
                 anchor_lang::system_program::Transfer {
-                    from: legacy_operations_authority_ai.clone(),
+                    from: payer_ai.clone(),
                     to: pool_ai.clone(),
                 },
             ),
@@ -687,6 +664,26 @@ pub struct Initialize<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
 
+    /// This program's `ProgramData` account, which carries the BPF loader's upgrade authority.
+    ///
+    /// The pool is a PDA of a fixed seed and no instruction can close it, so the first successful
+    /// `initialize` claims the only pool this deployment will ever have. Left permissionless that
+    /// is a griefing vector whose only remedy is redeploying at a new program ID, so pool creation
+    /// is tied to the key that deploys the program. `Account<ProgramData>` enforces the BPF
+    /// upgradeable loader as owner and rejects the other loader states; the address constraint
+    /// pins it to this program's record.
+    ///
+    /// Note this makes `initialize` unavailable once the program is made immutable
+    /// (`upgrade_authority_address == None`), which is intended: initialize and deploy belong to
+    /// the same operation.
+    #[account(
+        constraint = program_data.key() == program_data_address()
+            @ LiquidityError::InvalidProgramData,
+        constraint = program_data.upgrade_authority_address == Some(payer.key())
+            @ LiquidityError::NotUpgradeAuthority,
+    )]
+    pub program_data: Account<'info, ProgramData>,
+
     /// CHECK: Pause authority can be any account
     pub pause_authority: UncheckedAccount<'info>,
 
@@ -722,14 +719,24 @@ pub struct MigrateAuthorities<'info> {
     )]
     pub pool: UncheckedAccount<'info>,
 
-    /// Legacy operations authority. Verified inside the instruction against the legacy on-chain
-    /// bytes; pays the additional rent for the realloc unless the pool is already funded to the
-    /// new minimum balance. See `do_migrate_authorities` for the rent details.
+    /// Must be the program upgrade authority, as enforced against `program_data` below. Also
+    /// pays the additional rent for the realloc unless the pool is already funded to the new
+    /// minimum balance. See `do_migrate_authorities` for the rent details.
     #[account(mut)]
-    pub legacy_operations_authority: Signer<'info>,
+    pub payer: Signer<'info>,
 
-    /// Legacy pause authority. Verified inside the instruction against the legacy on-chain bytes.
-    pub legacy_pause_authority: Signer<'info>,
+    /// This program's `ProgramData` account. Same gate as `initialize`, for the same reason the
+    /// upgrade authority is the right key here: it can rewrite the pool wholesale by deploying
+    /// new code, so a migration it authorizes grants it nothing it did not already have. The
+    /// legacy authorities recorded in the pool are not consulted, which keeps hot keys out of
+    /// the operation.
+    #[account(
+        constraint = program_data.key() == program_data_address()
+            @ LiquidityError::InvalidProgramData,
+        constraint = program_data.upgrade_authority_address == Some(payer.key())
+            @ LiquidityError::NotUpgradeAuthority,
+    )]
+    pub program_data: Account<'info, ProgramData>,
 
     pub system_program: Program<'info, System>,
 }

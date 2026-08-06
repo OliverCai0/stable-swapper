@@ -28,6 +28,24 @@ const LEGACY_TOTAL =
   8 + (32 * 3 + (4 + 32 * MAX_SUPPORTED_TOKENS) + 8 + 1 + 1 + 1);
 
 const LIQUIDITY_POOL_SEED = Buffer.from("liquidity_pool");
+const BPF_LOADER_UPGRADEABLE = new PublicKey(
+  "BPFLoaderUpgradeab1e11111111111111111111111"
+);
+
+// `migrate_authorities` is gated on the program upgrade authority, which it reads from the
+// ProgramData account. Bankrun registers programs under the non-upgradeable loader, so no such
+// account exists and the test installs one: bincode-encoded `UpgradeableLoaderState::ProgramData`
+// is a u32 variant tag (3), a u64 slot, then `Option<Pubkey>` as a one-byte tag plus the key.
+function programDataBytes(upgradeAuthority: PublicKey | null): Buffer {
+  const buf = Buffer.alloc(45);
+  buf.writeUInt32LE(3, 0);
+  buf.writeBigUInt64LE(BigInt(0), 4);
+  if (upgradeAuthority) {
+    buf.writeUInt8(1, 12);
+    upgradeAuthority.toBuffer().copy(buf, 13);
+  }
+  return buf;
+}
 
 interface LegacyFields {
   ops: PublicKey;
@@ -62,8 +80,9 @@ function buildLegacyPoolData(disc: Buffer, f: LegacyFields): Buffer {
 /// Per-test substitutions for the accounts and role arguments the migration takes, so a test
 /// can vary one input while leaving the rest at their happy-path values.
 interface MigrateOverrides {
-  opsAuthority?: PublicKey;
-  pauseAuthority?: PublicKey;
+  payer?: PublicKey;
+  programData?: PublicKey;
+  signers?: Keypair[];
   newPause?: PublicKey;
   newUnpause?: PublicKey;
   newTreasury?: PublicKey;
@@ -83,12 +102,14 @@ describe("migrate_authorities (bankrun)", () => {
   let programId: PublicKey;
   let pool: PublicKey;
   let poolBump: number;
+  let programData: PublicKey;
+  let payer: PublicKey;
   let accountDiscriminator: Buffer;
 
-  // Legacy authorities embedded in the fabricated pool. The migration verifies the signers
-  // against these on-chain values.
-  const legacyOps = Keypair.generate();
-  const legacyPause = Keypair.generate();
+  // Legacy authorities embedded in the fabricated pool. The migration overwrites both with the
+  // new role keys and never consults them, so they only need to be present in the legacy bytes.
+  const legacyOps = Keypair.generate().publicKey;
+  const legacyPause = Keypair.generate().publicKey;
   const legacyFeeRecipient = Keypair.generate().publicKey;
 
   // New role keys supplied to the migration.
@@ -114,31 +135,46 @@ describe("migrate_authorities (bankrun)", () => {
     context = await start([{ name: "stable_swapper", programId }], []);
     provider = new BankrunProvider(context);
     program = new Program(IDL as StableSwapper, provider);
+    payer = provider.wallet.publicKey;
 
     [pool, poolBump] = PublicKey.findProgramAddressSync(
       [LIQUIDITY_POOL_SEED],
       programId
     );
+    [programData] = PublicKey.findProgramAddressSync(
+      [programId.toBuffer()],
+      BPF_LOADER_UPGRADEABLE
+    );
     accountDiscriminator = Buffer.from(
       IDL.accounts.find((a: any) => a.name === "LiquidityPool").discriminator
     );
 
-    // Fund the legacy signers as system accounts; legacyOps pays the realloc rent top-up.
-    for (const kp of [legacyOps, legacyPause]) {
-      context.setAccount(kp.publicKey, {
-        lamports: 1_000 * 1_000_000_000,
-        data: Buffer.alloc(0),
-        owner: SystemProgram.programId,
-        executable: false,
-        rentEpoch: 0,
-      });
-    }
+    // The provider wallet, which pays for every migration here, is the upgrade authority.
+    setProgramData(programData, payer);
   });
+
+  // A bankrun context holds a single bank whose blockhash only rolls when the slot moves, and
+  // several tests issue byte-identical `migrate` transactions. Sharing a blockhash across them
+  // would get the repeat rejected as already-processed before the guard under test ever runs.
+  let slot = 1;
+  beforeEach(() => {
+    context.warpToSlot(BigInt(++slot));
+  });
+
+  function setProgramData(address: PublicKey, authority: PublicKey | null) {
+    context.setAccount(address, {
+      lamports: 1_000_000_000,
+      data: programDataBytes(authority),
+      owner: BPF_LOADER_UPGRADEABLE,
+      executable: false,
+      rentEpoch: 0,
+    });
+  }
 
   async function seedLegacyPool(overrides: Partial<LegacyFields> = {}) {
     const fields: LegacyFields = {
-      ops: legacyOps.publicKey,
-      pause: legacyPause.publicKey,
+      ops: legacyOps,
+      pause: legacyPause,
       feeRecipient: legacyFeeRecipient,
       tokens,
       feeRate: 30,
@@ -159,7 +195,7 @@ describe("migrate_authorities (bankrun)", () => {
     });
   }
 
-  function migrate(signers: Keypair[], overrides: MigrateOverrides = {}) {
+  function migrate(overrides: MigrateOverrides = {}) {
     return program.methods
       .migrateAuthorities(
         overrides.newPause ?? newPause.publicKey,
@@ -170,12 +206,11 @@ describe("migrate_authorities (bankrun)", () => {
       )
       .accounts({
         pool,
-        legacyOperationsAuthority:
-          overrides.opsAuthority ?? legacyOps.publicKey,
-        legacyPauseAuthority: overrides.pauseAuthority ?? legacyPause.publicKey,
+        payer: overrides.payer ?? payer,
+        programData: overrides.programData ?? programData,
         systemProgram: SystemProgram.programId,
       })
-      .signers(signers)
+      .signers(overrides.signers ?? [])
       .rpc();
   }
 
@@ -202,7 +237,7 @@ describe("migrate_authorities (bankrun)", () => {
   it("migrates a legacy pool and preserves packed trailing state", async () => {
     await seedLegacyPool();
 
-    await migrate([legacyOps, legacyPause]);
+    await migrate();
 
     const acct = await fetchPool();
     // New roles applied.
@@ -252,49 +287,52 @@ describe("migrate_authorities (bankrun)", () => {
 
   it("rejects a second migration (AlreadyMigrated)", async () => {
     await seedLegacyPool();
-    await migrate([legacyOps, legacyPause]);
+    await migrate();
 
     // The retry must differ from the first transaction, otherwise the SVM rejects it as
     // already-processed (same signers, args, and blockhash) and the guard never runs. A
     // different role key is enough: AlreadyMigrated is checked on the account length,
     // before any of the legacy fields are parsed.
     try {
-      await migrate([legacyOps, legacyPause], {
-        newPause: Keypair.generate().publicKey,
-      });
+      await migrate({ newPause: Keypair.generate().publicKey });
       assert.fail("expected AlreadyMigrated");
     } catch (error) {
       assert.include(errText(error), "alreadymigrated");
     }
   });
 
-  it("rejects a migration when the legacy pause signer does not match", async () => {
+  it("rejects a caller that is not the upgrade authority", async () => {
     await seedLegacyPool();
     const stranger = Keypair.generate();
     fundSystemAccount(stranger.publicKey);
 
     try {
-      await migrate([legacyOps, stranger], {
-        pauseAuthority: stranger.publicKey,
-      });
-      assert.fail("expected legacy pause authority mismatch");
+      await migrate({ payer: stranger.publicKey, signers: [stranger] });
+      assert.fail("expected NotUpgradeAuthority");
     } catch (error) {
-      assert.include(errText(error), "legacypauseauthoritymismatch");
+      assert.include(errText(error), "notupgradeauthority");
     }
+
+    // The legacy layout must be left intact for a later, properly authorized attempt.
+    const raw = await context.banksClient.getAccount(pool);
+    assert.equal(raw!.data.length, LEGACY_TOTAL);
   });
 
-  it("rejects a migration when the legacy operations signer does not match", async () => {
+  it("rejects program data belonging to another program", async () => {
     await seedLegacyPool();
-    const stranger = Keypair.generate();
-    fundSystemAccount(stranger.publicKey);
+    // Well-formed and naming the payer as upgrade authority, but recorded for a different
+    // program. Only the address constraint separates it from this program's record.
+    const [foreign] = PublicKey.findProgramAddressSync(
+      [Keypair.generate().publicKey.toBuffer()],
+      BPF_LOADER_UPGRADEABLE
+    );
+    setProgramData(foreign, payer);
 
     try {
-      await migrate([stranger, legacyPause], {
-        opsAuthority: stranger.publicKey,
-      });
-      assert.fail("expected legacy operations authority mismatch");
+      await migrate({ programData: foreign });
+      assert.fail("expected InvalidProgramData");
     } catch (error) {
-      assert.include(errText(error), "legacyoperationsauthoritymismatch");
+      assert.include(errText(error), "invalidprogramdata");
     }
   });
 
@@ -313,7 +351,7 @@ describe("migrate_authorities (bankrun)", () => {
     });
 
     try {
-      await migrate([legacyOps, legacyPause]);
+      await migrate();
       assert.fail("expected LegacySizeMismatch");
     } catch (error) {
       assert.include(errText(error), "legacysizemismatch");
@@ -332,9 +370,7 @@ describe("migrate_authorities (bankrun)", () => {
     for (const role of roles) {
       await seedLegacyPool();
       try {
-        await migrate([legacyOps, legacyPause], {
-          [role]: PublicKey.default,
-        });
+        await migrate({ [role]: PublicKey.default });
         assert.fail(`expected AuthorityNotSet for ${role}`);
       } catch (error) {
         assert.include(errText(error), "authoritynotset", `role: ${role}`);
@@ -346,7 +382,7 @@ describe("migrate_authorities (bankrun)", () => {
     // Regression guard for the offset math when len = 0: trailing fields sit right after
     // the 4-byte length prefix.
     await seedLegacyPool({ tokens: [], feeRate: 7, swapsPaused: false });
-    await migrate([legacyOps, legacyPause]);
+    await migrate();
 
     const acct = await fetchPool();
     assert.equal(acct.supportedTokens.length, 0);
