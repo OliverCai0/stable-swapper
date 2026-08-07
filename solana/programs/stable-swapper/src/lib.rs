@@ -12,7 +12,7 @@ use errors::*;
 use state::*;
 use utils::*;
 
-declare_id!("5y8vk3bkbNuahkfDF4ub53bcoszHEnhvz4oWRfH6S81h");
+declare_id!("Di4bHuP7xRMrpDuZBsQpgiGkn6dec52SQ1yX846sySDb");
 
 // NOTE: The previously deployed whitelist PDA (seeded b"address_whitelist") is orphaned
 // on devnet/mainnet after whitelist removal. Its rent is intentionally forfeited; adding a

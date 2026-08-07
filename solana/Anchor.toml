@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-stable_swapper = "5y8vk3bkbNuahkfDF4ub53bcoszHEnhvz4oWRfH6S81h"
+stable_swapper = "Di4bHuP7xRMrpDuZBsQpgiGkn6dec52SQ1yX846sySDb"
 
 [programs.devnet]
 stable_swapper = "9vDwZVJXw5nxymWmUcgmNpemDH5EBcJwLNhtsznrgJDH"
