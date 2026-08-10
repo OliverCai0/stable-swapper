@@ -50,8 +50,8 @@ pub enum LiquidityError {
     VaultNotEmpty,
     #[msg("Pool has already been migrated to the role-based authority layout")]
     AlreadyMigrated,
-    #[msg("Withdraw recipient is not configured")]
-    WithdrawRecipientNotSet,
+    #[msg("Recipient key must not be the default pubkey")]
+    RecipientNotSet,
     #[msg("Withdraw recipient is not on the allowlist")]
     WithdrawRecipientNotAllowed,
     #[msg("Withdraw recipient is already on the allowlist")]

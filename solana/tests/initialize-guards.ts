@@ -180,8 +180,8 @@ describe("initialize role guards (bankrun)", () => {
     ["unpauseAuthority", "authoritynotset"],
     ["treasuryAuthority", "authoritynotset"],
     ["configureAuthority", "authoritynotset"],
-    ["feeRecipient", "authoritynotset"],
-    ["withdrawRecipient", "withdrawrecipientnotset"],
+    ["feeRecipient", "recipientnotset"],
+    ["withdrawRecipient", "recipientnotset"],
   ];
 
   for (const [role, expected] of zeroKeyCases) {

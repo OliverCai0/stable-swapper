@@ -12,7 +12,7 @@ use errors::*;
 use state::*;
 use utils::*;
 
-declare_id!("9vDwZVJXw5nxymWmUcgmNpemDH5EBcJwLNhtsznrgJDH");
+declare_id!("pqgqKahpG1y2wsgxFhzaAnkV1cL9vk8MSg9qm4q646F");
 
 // NOTE: The previously deployed whitelist PDA (seeded b"address_whitelist") is orphaned
 // on devnet/mainnet after whitelist removal. Its rent is intentionally forfeited; adding a
@@ -24,14 +24,10 @@ pub mod stable_swapper {
 
     pub fn initialize(ctx: Context<Initialize>, fee_rate: u64) -> Result<()> {
         require!(fee_rate <= MAX_FEE_RATE, LiquidityError::InvalidFeeRate);
-        // Refuse to stand up a pool whose withdraws would be unconditionally blocked by
-        // `withdraw_liquidity`'s zero-key guard. Mirrors `update_withdraw_recipient`.
-        require!(
-            ctx.accounts.withdraw_recipient.key() != Pubkey::default(),
-            LiquidityError::WithdrawRecipientNotSet
-        );
-        // A role assigned to the default pubkey is unrecoverable: every rotation instruction
-        // requires the current holder to sign, and nothing can sign for the zero key.
+        // Reject the default pubkey for every stored key so the pool starts fully usable; the
+        // require_*_set helpers explain why a zero key is rejected.
+        require_recipient_set("withdraw_recipient", &ctx.accounts.withdraw_recipient.key())?;
+        require_recipient_set("fee_recipient", &ctx.accounts.fee_recipient.key())?;
         require_authority_set("pause_authority", &ctx.accounts.pause_authority.key())?;
         require_authority_set("unpause_authority", &ctx.accounts.unpause_authority.key())?;
         require_authority_set("treasury_authority", &ctx.accounts.treasury_authority.key())?;
@@ -39,9 +35,6 @@ pub mod stable_swapper {
             "configure_authority",
             &ctx.accounts.configure_authority.key(),
         )?;
-        // Same zero-key rule `update_fee_recipient` applies, so a pool cannot start out in a
-        // state that instruction would refuse to set.
-        require_authority_set("fee_recipient", &ctx.accounts.fee_recipient.key())?;
 
         let pool = &mut ctx.accounts.pool;
         pool.pause_authority = ctx.accounts.pause_authority.key();
@@ -63,10 +56,7 @@ pub mod stable_swapper {
     }
 
     /// One-shot migration from the legacy `(operations_authority, pause_authority)` layout
-    /// to the new role-based layout. Gated on the program upgrade authority rather than on the
-    /// legacy authorities stored in the pool: the upgrade authority can already rewrite this
-    /// account by deploying new code, so it is the key that ultimately governs the migration,
-    /// and routing through it keeps the legacy hot keys out of the operation.
+    /// to the new role-based layout. Gated on the program upgrade authority.
     ///
     /// The pool grows from the legacy layout to `LiquidityPool::INIT_SPACE` (extra role keys
     /// plus the withdraw-recipient allowlist slot). The legacy account is opened as
@@ -364,9 +354,7 @@ pub mod stable_swapper {
         ctx: Context<UpdateFeeConfig>,
         fee_recipient: Pubkey,
     ) -> Result<()> {
-        // The recipient is the ATA authority for every fee transfer, so the default pubkey would
-        // silently send fees to a token account that nothing can sign for.
-        require_authority_set("fee_recipient", &fee_recipient)?;
+        require_recipient_set("fee_recipient", &fee_recipient)?;
         ctx.accounts.pool.fee_recipient = fee_recipient;
         msg!("Updated fee recipient to: {}", fee_recipient);
         Ok(())
@@ -377,10 +365,7 @@ pub mod stable_swapper {
         ctx: Context<ConfigureWithdrawRecipients>,
         recipient: Pubkey,
     ) -> Result<()> {
-        require!(
-            recipient != Pubkey::default(),
-            LiquidityError::WithdrawRecipientNotSet
-        );
+        require_recipient_set("withdraw_recipient", &recipient)?;
         let pool = &mut ctx.accounts.pool;
         require!(
             !pool.withdraw_recipients.contains(&recipient),
@@ -495,17 +480,27 @@ pub mod stable_swapper {
     }
 }
 
-/// Rejects the default pubkey for a key stored on the pool. Roles can only be rotated by their
-/// current holder, so a zero-key role is a one-way door: no signature exists for it. The fee
-/// recipient is recoverable by comparison, but a zero key there routes every fee to a token
-/// account nobody can sign for. `field` names the offending key, since a bare comparison logs
-/// the same zero key on both sides.
-fn require_authority_set(field: &str, key: &Pubkey) -> Result<()> {
+/// Rejects the default pubkey for a key stored on the pool, failing with `error_code`. `field`
+/// names the offending key, since a bare comparison logs the same zero key on both sides.
+fn require_key_set(field: &str, key: &Pubkey, error_code: LiquidityError) -> Result<()> {
     if *key == Pubkey::default() {
         msg!("{} must not be set to the default pubkey", field);
-        return err!(LiquidityError::AuthorityNotSet);
+        return Err(error_code.into());
     }
     Ok(())
+}
+
+/// Rejects the default pubkey for a signing role. Roles can only be rotated by their current
+/// holder, so a zero-key role is a one-way door: no signature exists for it.
+fn require_authority_set(field: &str, key: &Pubkey) -> Result<()> {
+    require_key_set(field, key, LiquidityError::AuthorityNotSet)
+}
+
+/// Rejects the default pubkey for a payout destination (fee or withdraw recipient). Unlike a
+/// role, a recipient never signs; a zero key just routes funds to a token account nobody can
+/// sign for.
+fn require_recipient_set(field: &str, key: &Pubkey) -> Result<()> {
+    require_key_set(field, key, LiquidityError::RecipientNotSet)
 }
 
 /// Shared body for `migrate_authorities`: legacy parse, realloc, rent top-up, re-serialize.
@@ -529,12 +524,7 @@ fn do_migrate_authorities<'info>(
     new_configure_authority: Pubkey,
     new_withdraw_recipient: Pubkey,
 ) -> Result<()> {
-    require!(
-        new_withdraw_recipient != Pubkey::default(),
-        LiquidityError::WithdrawRecipientNotSet
-    );
-    // A role assigned to the default pubkey is unrecoverable: every rotation instruction
-    // requires the current holder to sign, and nothing can sign for the zero key.
+    require_recipient_set("withdraw_recipient", &new_withdraw_recipient)?;
     require_authority_set("pause_authority", &new_pause_authority)?;
     require_authority_set("unpause_authority", &new_unpause_authority)?;
     require_authority_set("treasury_authority", &new_treasury_authority)?;

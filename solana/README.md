@@ -84,10 +84,11 @@ anchor deploy --provider.cluster devnet
 
 ### Running the Test Suite
 
-The committed `declare_id!` and `[programs.devnet]` / `[programs.mainnet]`
-entries point at the real deployed programs. To run the Anchor / Mocha suite
-against a local validator, generate a throwaway keypair and align all three
-references to it before building:
+The committed `declare_id!` is the **mainnet** program ID (`pqgqK…`, matching
+`[programs.mainnet]` and `[programs.localnet]`); `[programs.devnet]` points at
+the separate devnet deployment. To run the Anchor / Mocha suite against a local
+validator, generate a throwaway keypair and align all three references to it
+before building:
 
 ```bash
 # Mint an ephemeral test keypair and align the program ID everywhere
@@ -208,6 +209,15 @@ Program binaries are built with Anchor and deployed via your usual Solana releas
 process (upgrade authority is independent of in-program roles). There are no
 in-repo ops CLIs or deployment runbooks; use internal deploy / migration tooling
 for production upgrades and `migrate_authorities`.
+
+**Program ID must match the deployment.** `declare_id!` is compiled into the
+binary and checked at runtime against the address the program is deployed at; a
+mismatch makes the program reject every instruction with
+`DeclaredProgramIdMismatch`. The committed `declare_id!` is the **mainnet** ID,
+so a mainnet build uses the source as-is and CI enforces
+`declare_id == [programs.mainnet]`. A **devnet** build must first patch
+`declare_id!` (and `[programs.localnet]`) to `[programs.devnet]`; otherwise a
+devnet upgrade bricks the same way.
 
 ```bash
 # Local / CI build

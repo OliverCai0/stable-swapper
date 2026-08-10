@@ -2111,9 +2111,9 @@ describe("stable-swapper", () => {
           })
           .signers([configureAuthority.payer])
           .rpc();
-        assert.fail("Expected AuthorityNotSet error");
+        assert.fail("Expected RecipientNotSet error");
       } catch (error) {
-        assert.include(error.toString().toLowerCase(), "authoritynotset");
+        assert.include(error.toString().toLowerCase(), "recipientnotset");
       }
 
       const poolAccount = await program.account.liquidityPool.fetch(pool);
@@ -3241,12 +3241,9 @@ describe("stable-swapper", () => {
           .accounts({ pool, configureAuthority: configureAuthority.publicKey })
           .signers([configureAuthority.payer])
           .rpc();
-        assert.fail("Expected WithdrawRecipientNotSet");
+        assert.fail("Expected RecipientNotSet");
       } catch (error) {
-        assert.include(
-          error.toString().toLowerCase(),
-          "withdrawrecipientnotset"
-        );
+        assert.include(error.toString().toLowerCase(), "recipientnotset");
       }
     });
 
