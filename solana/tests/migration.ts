@@ -285,6 +285,48 @@ describe("migrate_authorities (bankrun)", () => {
     );
   });
 
+  it("zeroes stale trailing bytes after migration", async () => {
+    const data = buildLegacyPoolData(accountDiscriminator, {
+      ops: legacyOps,
+      pause: legacyPause,
+      feeRecipient: legacyFeeRecipient,
+      tokens,
+      feeRate: 30,
+      swapsPaused: true,
+      liquidityPaused: false,
+      bump: poolBump,
+    });
+    const legacyPackedEnd = 108 + tokens.length * 32 + 8 + 1 + 1 + 1;
+    data.fill(0xff, legacyPackedEnd);
+    const rent = await context.banksClient.getRent();
+    context.setAccount(pool, {
+      lamports: Number(rent.minimumBalance(BigInt(data.length))),
+      data,
+      owner: programId,
+      executable: false,
+      rentEpoch: 0,
+    });
+
+    await migrate();
+
+    const raw = await context.banksClient.getAccount(pool);
+    assert.isNotNull(raw, "pool account missing");
+    const body = Buffer.from(raw!.data);
+    const packed = await program.coder.accounts.encode(
+      "liquidityPool",
+      await fetchPool()
+    );
+    const tail = body.subarray(packed.length);
+    assert.isTrue(
+      tail.length > 0,
+      "expected reserved capacity past the packed struct"
+    );
+    assert.isTrue(
+      tail.every((b) => b === 0),
+      "bytes past the packed struct must be zeroed"
+    );
+  });
+
   it("rejects a second migration (AlreadyMigrated)", async () => {
     await seedLegacyPool();
     await migrate();

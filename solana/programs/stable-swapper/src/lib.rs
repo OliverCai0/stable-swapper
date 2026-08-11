@@ -634,6 +634,7 @@ fn do_migrate_authorities<'info>(
 
     {
         let mut data = pool_ai.try_borrow_mut_data()?;
+        data.fill(0);
         // Discriminator is the same before and after migration; rewrite it explicitly
         // and then borsh-serialize the struct body.
         data[..8].copy_from_slice(LiquidityPool::DISCRIMINATOR);
