@@ -1450,9 +1450,9 @@ describe("stable-swapper", () => {
         .unpauseSwaps() // swapsPaused, liquidityPaused
         .accounts({
           pool,
-          pauseAuthority: pauseAuthority.publicKey,
+          unpauseAuthority: unpauseAuthority.publicKey,
         })
-        .signers([pauseAuthority.payer])
+        .signers([unpauseAuthority.payer])
         .rpc();
 
       // Verify swaps are unpaused
