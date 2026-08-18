@@ -365,7 +365,7 @@ describe("stable-swapper", () => {
 
         assert.fail("Expected liquidity paused error");
       } catch (error) {
-        assert.include(error.toString(), "LiquidityPaused");
+        assert.include(error.toString(), "WithdrawalPaused");
       }
 
       // Unpause liquidity for other tests

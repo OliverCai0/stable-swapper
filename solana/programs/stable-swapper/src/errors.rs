@@ -4,8 +4,8 @@ use anchor_lang::prelude::*;
 pub enum LiquidityError {
     #[msg("Swaps are paused")]
     SwapsPaused,
-    #[msg("Liquidity management is paused")]
-    LiquidityPaused,
+    #[msg("Withdrawals are paused")]
+    WithdrawalPaused,
     #[msg("Invalid amount")]
     InvalidAmount,
     #[msg("Token not supported")]

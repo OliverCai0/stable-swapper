@@ -303,7 +303,7 @@ pub mod stable_swapper {
 
     pub fn withdraw_liquidity(ctx: Context<WithdrawLiquidity>, amount: u64) -> Result<()> {
         let pool = &ctx.accounts.pool;
-        require!(!pool.liquidity_paused, LiquidityError::LiquidityPaused);
+        require!(!pool.liquidity_paused, LiquidityError::WithdrawalPaused);
         require!(amount > 0, LiquidityError::InvalidAmount);
 
         // The treasury (hot) key selects a destination by passing its token account; the program
