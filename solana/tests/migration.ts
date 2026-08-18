@@ -420,6 +420,16 @@ describe("migrate_authorities (bankrun)", () => {
     }
   });
 
+  it("rejects a legacy pool with a default-pubkey fee_recipient", async () => {
+    await seedLegacyPool({ feeRecipient: PublicKey.default });
+    try {
+      await migrate();
+      assert.fail("expected RecipientNotSet");
+    } catch (error) {
+      assert.include(errText(error), "recipientnotset");
+    }
+  });
+
   it("works with an empty legacy supported_tokens vec", async () => {
     // Regression guard for the offset math when len = 0: trailing fields sit right after
     // the 4-byte length prefix.

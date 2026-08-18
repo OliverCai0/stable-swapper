@@ -598,6 +598,8 @@ fn do_migrate_authorities<'info>(
         )
     };
 
+    require_recipient_set("fee_recipient", &legacy_fee_recipient)?;
+
     // Top up rent for the additional `LiquidityPool::MIGRATION_GROWTH` bytes, then grow the
     // account. This is a no-op when the pool already holds the new minimum balance.
     let rent = Rent::get()?;
