@@ -856,7 +856,7 @@ describe("stable-swapper", () => {
       // amount_after_fee = 1 - 1 = 0
       // amount_out = 0 (should fail)
       const tinySwapAmount = new anchor.BN(1);
-      const minAmountOut = new anchor.BN(0); // User doesn't care about slippage
+      const minAmountOut = new anchor.BN(1); // Nonzero; the zero-output check below is what's under test
 
       try {
         await program.methods
@@ -2691,7 +2691,7 @@ describe("stable-swapper", () => {
   describe("Token Validation", () => {
     it("Fails to swap same token (from == to)", async () => {
       const swapAmount = new anchor.BN(10 * 10 ** 6);
-      const minAmountOut = new anchor.BN(0);
+      const minAmountOut = new anchor.BN(1); // Nonzero; the same-token check below is what's under test
 
       try {
         await program.methods
@@ -2780,7 +2780,7 @@ describe("stable-swapper", () => {
   describe("Token Validation", () => {
     it("Fails to swap same token (from == to)", async () => {
       const swapAmount = new anchor.BN(10 * 10 ** 6);
-      const minAmountOut = new anchor.BN(0);
+      const minAmountOut = new anchor.BN(1); // Nonzero; the same-token check below is what's under test
 
       try {
         await program.methods

@@ -171,6 +171,7 @@ pub mod stable_swapper {
         let pool = &ctx.accounts.pool;
         require!(!pool.swaps_paused, LiquidityError::SwapsPaused);
         require!(amount_in > 0, LiquidityError::InvalidAmount);
+        require!(min_amount_out > 0, LiquidityError::InvalidAmount);
 
         // Check that neither token is disabled
         require!(
