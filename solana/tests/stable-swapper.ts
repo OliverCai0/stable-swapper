@@ -362,7 +362,7 @@ describe("stable-swapper", () => {
     it("Fails to withdraw when liquidity is paused", async () => {
       // First pause liquidity
       await program.methods
-        .pauseWithdraws() // swapsPaused=null, liquidityPaused=true
+        .pauseWithdraws() // Sets liquidityPaused=true; swapsPaused is unchanged
         .accounts({
           pool,
           pauseAuthority: pauseAuthority.publicKey,
@@ -1434,7 +1434,7 @@ describe("stable-swapper", () => {
 
     it("Pauses swaps", async () => {
       await program.methods
-        .pauseSwaps() // swapsPaused, liquidityPaused
+        .pauseSwaps() // Sets swapsPaused=true; liquidityPaused is unchanged
         .accounts({
           pool,
           pauseAuthority: pauseAuthority.publicKey,
@@ -1483,7 +1483,7 @@ describe("stable-swapper", () => {
 
     it("Unpauses swaps", async () => {
       await program.methods
-        .unpauseSwaps() // swapsPaused, liquidityPaused
+        .unpauseSwaps() // Sets swapsPaused=false; liquidityPaused is unchanged
         .accounts({
           pool,
           unpauseAuthority: unpauseAuthority.publicKey,
