@@ -223,6 +223,18 @@ describe("stable-swapper", () => {
         .signers([configureAuthority.payer])
         .rpc();
 
+      // Newly listed tokens start disabled; enable swapping.
+      await program.methods
+        .unpauseToken()
+        .accounts({
+          pool,
+          vault: usdcVault,
+          mint: usdcMint,
+          unpauseAuthority: unpauseAuthority.publicKey,
+        })
+        .signers([unpauseAuthority.payer])
+        .rpc();
+
       // Verify vault creation
       const vaultAccount = await program.account.tokenVault.fetch(usdcVault);
       assert.equal(vaultAccount.mint.toString(), usdcMint.toString());
@@ -253,6 +265,18 @@ describe("stable-swapper", () => {
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         })
         .signers([configureAuthority.payer])
+        .rpc();
+
+      // Newly listed tokens start disabled; enable swapping.
+      await program.methods
+        .unpauseToken()
+        .accounts({
+          pool,
+          vault: customStableVault,
+          mint: customStableMint,
+          unpauseAuthority: unpauseAuthority.publicKey,
+        })
+        .signers([unpauseAuthority.payer])
         .rpc();
 
       // Verify pool now has both tokens
@@ -1109,6 +1133,18 @@ describe("stable-swapper", () => {
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         })
         .signers([configureAuthority.payer])
+        .rpc();
+
+      // Newly listed tokens start disabled; enable swapping.
+      await program.methods
+        .unpauseToken()
+        .accounts({
+          pool,
+          vault: testTokenVault,
+          mint: testTokenMint,
+          unpauseAuthority: unpauseAuthority.publicKey,
+        })
+        .signers([unpauseAuthority.payer])
         .rpc();
 
       const poolAccount = await program.account.liquidityPool.fetch(pool);
@@ -2193,6 +2229,18 @@ describe("stable-swapper", () => {
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         })
         .signers([configureAuthority.payer])
+        .rpc();
+
+      // Newly listed tokens start disabled; enable swapping.
+      await program.methods
+        .unpauseToken()
+        .accounts({
+          pool,
+          vault: token9DecVault,
+          mint: token9DecMint,
+          unpauseAuthority: unpauseAuthority.publicKey,
+        })
+        .signers([unpauseAuthority.payer])
         .rpc();
 
       // Seed liquidity for 9-decimal token via direct SPL transfer

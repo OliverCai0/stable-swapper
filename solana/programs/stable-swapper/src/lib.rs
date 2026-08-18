@@ -108,7 +108,7 @@ pub mod stable_swapper {
         let vault = &mut ctx.accounts.vault;
         vault.mint = mint;
         // reserved_amount is layout-only and stays zero because Anchor initializes account data with zeroes.
-        vault.disabled = false;
+        vault.disabled = true;
         vault.bump = ctx.bumps.vault;
 
         msg!("Added supported token: {}", mint);
