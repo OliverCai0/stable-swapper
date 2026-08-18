@@ -507,8 +507,8 @@ fn require_recipient_set(field: &str, key: &Pubkey) -> Result<()> {
 /// The Accounts struct on the calling instruction is responsible for verifying the pool address
 /// (the canonical PDA) and that the caller is the program upgrade authority.
 ///
-/// Rent: the pool grows by `LiquidityPool::MIGRATION_GROWTH` bytes (the two extra role keys
-/// plus the withdraw-recipient allowlist), and `payer_ai` pays the difference through a
+/// Rent: the pool grows by the two extra role keys plus the withdraw-recipient allowlist,
+/// and `payer_ai` pays the difference through a
 /// `system_program::transfer` CPI. It must therefore be a system-owned account holding enough
 /// lamports (~0.0027 SOL at the current rent rate). When the pool PDA already holds
 /// `Rent::minimum_balance` for the new size the top-up is skipped entirely and no lamports are
@@ -600,8 +600,8 @@ fn do_migrate_authorities<'info>(
 
     require_recipient_set("fee_recipient", &legacy_fee_recipient)?;
 
-    // Top up rent for the additional `LiquidityPool::MIGRATION_GROWTH` bytes, then grow the
-    // account. This is a no-op when the pool already holds the new minimum balance.
+    // Top up rent for the additional bytes, then grow the account. This is a no-op when the
+    // pool already holds the new minimum balance.
     let rent = Rent::get()?;
     let new_min_balance = rent.minimum_balance(new_total);
     let lamports_diff = new_min_balance.saturating_sub(pool_ai.lamports());
