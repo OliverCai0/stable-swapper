@@ -12,9 +12,9 @@ pub struct LiquidityPool {
     pub pause_authority: Pubkey,
     /// Cold key allowed to unpause swaps, withdraws, and individual tokens.
     pub unpause_authority: Pubkey,
-    /// Hot key allowed to withdraw liquidity (only to `withdraw_recipient`).
+    /// Hot key allowed to withdraw liquidity (only to an allowlisted owner in `withdraw_recipients`).
     pub treasury_authority: Pubkey,
-    /// Cold key allowed to list/unlist tokens, update fee config, and rotate the withdraw recipient.
+    /// Cold key allowed to list/unlist tokens, update fee config, and manage the withdraw_recipients allowlist.
     pub configure_authority: Pubkey,
     /// Recipient of swap fees (token transfers go to its ATA per mint).
     pub fee_recipient: Pubkey,
