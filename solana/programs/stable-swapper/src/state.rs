@@ -1,11 +1,27 @@
-use crate::constants::MAX_SUPPORTED_TOKENS;
+use crate::constants::{MAX_SUPPORTED_TOKENS, MAX_WITHDRAW_RECIPIENTS};
 use anchor_lang::prelude::*;
 
+// Discriminator-stability invariant: Anchor derives the 8-byte account discriminator from
+// the struct *name*, not its field layout. The `migrate_authorities` instruction relies on
+// the discriminator being identical before and after migration, which means this struct
+// MUST stay named `LiquidityPool`. Renaming it would break re-deserialization of every
+// existing pool on devnet/mainnet and break the migration's discriminator check.
 #[account]
 pub struct LiquidityPool {
-    pub operations_authority: Pubkey,
+    /// Hot key allowed to pause swaps, withdraws, and individual tokens.
     pub pause_authority: Pubkey,
+    /// Cold key allowed to unpause swaps, withdraws, and individual tokens.
+    pub unpause_authority: Pubkey,
+    /// Hot key allowed to withdraw liquidity (only to an allowlisted owner in `withdraw_recipients`).
+    pub treasury_authority: Pubkey,
+    /// Cold key allowed to list/unlist tokens, update fee config, and manage the withdraw_recipients allowlist.
+    pub configure_authority: Pubkey,
+    /// Recipient of swap fees (token transfers go to its ATA per mint).
     pub fee_recipient: Pubkey,
+    /// Allowlist of owners whose token accounts may receive `withdraw_liquidity` outputs.
+    /// The treasury authority selects any one of these per withdraw; only `configure_authority`
+    /// can add or remove entries.
+    pub withdraw_recipients: Vec<Pubkey>,
     pub supported_tokens: Vec<Pubkey>,
     pub fee_rate: u64, // in basis points
     pub swaps_paused: bool,
@@ -16,7 +32,21 @@ pub struct LiquidityPool {
 }
 
 impl LiquidityPool {
-    pub const INIT_SPACE: usize = 32 + 32 + 32 + (4 + 32 * MAX_SUPPORTED_TOKENS) + 8 + 1 + 1 + 1; // operations_authority + pause_authority + fee_recipient + supported_tokens + fee_rate + swaps_paused + liquidity_paused + bump
+    // 5 Pubkeys (pause/unpause/treasury/configure/fee_recipient)
+    // + withdraw_recipients vec header + cap
+    // + supported_tokens vec header + cap
+    // + fee_rate + 2 bools + bump
+    pub const INIT_SPACE: usize = 32 * 5
+        + (4 + 32 * MAX_WITHDRAW_RECIPIENTS)
+        + (4 + 32 * MAX_SUPPORTED_TOKENS)
+        + 8
+        + 1
+        + 1
+        + 1;
+
+    /// Pre-migration on-chain layout: ops + pause + fee_recipient + supported_tokens + fee_rate + 2 bools + bump.
+    /// Used by `migrate_authorities` to size the pre-realloc account before expanding to `INIT_SPACE`.
+    pub const LEGACY_INIT_SPACE: usize = 32 * 3 + (4 + 32 * MAX_SUPPORTED_TOKENS) + 8 + 1 + 1 + 1;
 }
 
 #[account]

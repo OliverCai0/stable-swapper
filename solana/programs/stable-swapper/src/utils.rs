@@ -1,6 +1,15 @@
 use crate::errors::LiquidityError;
 use anchor_lang::prelude::*;
 
+/// Address of this program's `ProgramData` account under the BPF upgradeable loader.
+///
+/// Deriving it here rather than taking the program account as an extra input keeps the
+/// caller's account list minimal: the seed is `crate::ID`, which Anchor already pins to the
+/// executing program, so there is no way to point the check at another program's authority.
+pub fn program_data_address() -> Pubkey {
+    Pubkey::find_program_address(&[crate::ID.as_ref()], &ProgramData::owner()).0
+}
+
 /// Normalizes an amount from source decimals to destination decimals.
 /// Uses round-down (floor) strategy to favor the protocol.
 ///

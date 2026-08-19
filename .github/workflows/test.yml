@@ -65,6 +65,38 @@ jobs:
         working-directory: solana
         run: cargo fmt --all -- --check
 
+      # Guards against the committed source silently building for the wrong network. `declare_id!`
+      # is baked into the binary and checked at runtime against the deployment address, so a
+      # mainnet upgrade built from a source whose `declare_id` is not the mainnet program ID would
+      # reject every instruction with DeclaredProgramIdMismatch. The committed value must be the
+      # mainnet ID; the ephemeral-align step below rewrites it for localnet tests, and a devnet
+      # rehearsal patches it to [programs.devnet] (see solana/README.md).
+      - name: Verify declare_id matches the mainnet program ID
+        working-directory: solana
+        run: |
+          set -euo pipefail
+          DECLARED=$(sed -nE 's/^declare_id!\("([^"]+)"\).*/\1/p' \
+            programs/stable-swapper/src/lib.rs)
+          MAINNET=$(awk '
+            /^\[programs\.mainnet\]/ { f = 1; next }
+            /^\[/                    { f = 0 }
+            f && /^stable_swapper/ {
+              gsub(/["[:space:]]/, "", $0); sub(/stable_swapper=/, "", $0); print; exit
+            }
+          ' Anchor.toml)
+          if [ -z "$DECLARED" ] || [ -z "$MAINNET" ]; then
+            echo "Could not read declare_id ('$DECLARED') or [programs.mainnet] ('$MAINNET')" >&2
+            exit 1
+          fi
+          if [ "$DECLARED" != "$MAINNET" ]; then
+            echo "declare_id ($DECLARED) != [programs.mainnet] ($MAINNET) in Anchor.toml." >&2
+            echo "A mainnet build from this source would deploy the wrong program ID and brick" >&2
+            echo "with DeclaredProgramIdMismatch on every instruction. Set declare_id to the" >&2
+            echo "mainnet program ID before merging." >&2
+            exit 1
+          fi
+          echo "declare_id matches [programs.mainnet]: $DECLARED"
+
       - name: Install JS dependencies
         run: yarn install --frozen-lockfile
         working-directory: solana
@@ -141,4 +173,31 @@ jobs:
 
       - name: Run Anchor tests
         working-directory: solana
-        run: anchor test --provider.cluster localnet --skip-build
+        run: |
+          set -euo pipefail
+
+          WALLET="$(solana address)"
+
+          # `anchor test`'s built-in deploy leaves the program's upgrade authority set to a key
+          # other than the provider wallet, which trips initialize's NotUpgradeAuthority guard.
+          # Load the program into a validator we control -- upgradeable, with the provider wallet
+          # as the upgrade authority -- and have anchor run only the test script against it.
+          solana-test-validator --reset --quiet \
+            --upgradeable-program target/deploy/stable_swapper-keypair.json \
+              target/deploy/stable_swapper.so "$WALLET" &
+          VALIDATOR_PID=$!
+          trap 'kill "$VALIDATOR_PID" 2>/dev/null || true' EXIT
+
+          # Wait for the validator RPC to accept requests before deploying/airdropping.
+          for _ in $(seq 1 60); do
+            if solana cluster-version --url http://127.0.0.1:8899 >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+
+          # Fund the provider wallet so it can pay for test transactions.
+          solana airdrop 100 "$WALLET" --url http://127.0.0.1:8899 >/dev/null
+
+          anchor test --provider.cluster localnet \
+            --skip-build --skip-deploy --skip-local-validator
