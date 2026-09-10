@@ -12,9 +12,6 @@ pub const MAX_SUPPORTED_TOKENS: usize = 50;
 /// these addresses; only the cold-key configure authority can add or remove them.
 pub const MAX_WITHDRAW_RECIPIENTS: usize = 10;
 
-/// Maximum number of whitelisted addresses
-pub const MAX_WHITELISTED_ADDRESSES: usize = 100;
-
 /// Minimum allowed token decimals
 pub const MIN_TOKEN_DECIMALS: u8 = 6;
 

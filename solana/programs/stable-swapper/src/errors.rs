@@ -32,8 +32,8 @@ pub enum LiquidityError {
     DecimalNormalizationOverflow,
     #[msg("Token is disabled and cannot be used in swaps")]
     TokenDisabled,
-    #[msg("Address not whitelisted")]
-    NotWhitelisted,
+    #[msg("Deprecated: previously NotWhitelisted")]
+    DeprecatedNotWhitelisted,
     #[msg("Deprecated: previously MaxWhitelistedAddressesReached")]
     DeprecatedMaxWhitelistedAddressesReached,
     #[msg("Deprecated: previously AddressAlreadyWhitelisted")]

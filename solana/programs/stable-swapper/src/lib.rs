@@ -47,11 +47,6 @@ pub mod stable_swapper {
         pool.liquidity_paused = false;
         pool.bump = ctx.bumps.pool;
 
-        let whitelist = &mut ctx.accounts.whitelist;
-        whitelist.addresses = Vec::new();
-        whitelist.enabled = false;
-        whitelist.bump = ctx.bumps.whitelist;
-
         msg!("Liquidity pool initialized with fee rate: {}", fee_rate);
         Ok(())
     }
@@ -174,12 +169,10 @@ pub mod stable_swapper {
         require!(amount_in > 0, LiquidityError::InvalidAmount);
         require!(min_amount_out > 0, LiquidityError::InvalidAmount);
 
-        if ctx.accounts.whitelist.enabled {
-            require!(
-                ctx.accounts.whitelist.is_whitelisted(&ctx.accounts.user.key()),
-                LiquidityError::NotWhitelisted
-            );
-        }
+        // Whitelist enforcement is permanently deprecated. `whitelist` stays in this
+        // instruction's account list (see the field below) purely so already-encoded
+        // callers/indexers built against the pre-deprecation `swap` signature keep working;
+        // nothing reads or writes it anymore.
 
         // Check that neither token is disabled
         require!(
@@ -713,15 +706,6 @@ pub struct Initialize<'info> {
     /// allowlist, which `configure_authority` manages via add/remove after initialization.
     pub withdraw_recipient: UncheckedAccount<'info>,
 
-    #[account(
-        init,
-        payer = payer,
-        space = 8 + AddressWhitelist::INIT_SPACE,
-        seeds = [ADDRESS_WHITELIST_SEED],
-        bump
-    )]
-    pub whitelist: Account<'info, AddressWhitelist>,
-
     pub system_program: Program<'info, System>,
 }
 
@@ -924,11 +908,16 @@ pub struct Swap<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
+    /// Deprecated whitelist PDA. Kept only so the account list matches the
+    /// pre-deprecation `swap` signature that existing callers/indexers already encode;
+    /// its data is never read. On mainnet this resolves to the orphaned whitelist account
+    /// left behind by the original removal; on fresh deployments it need not exist at all.
+    /// CHECK: seeds-verified PDA address only; deliberately not deserialized.
     #[account(
         seeds = [ADDRESS_WHITELIST_SEED],
-        bump = whitelist.bump
+        bump
     )]
-    pub whitelist: Account<'info, AddressWhitelist>,
+    pub whitelist: UncheckedAccount<'info>,
 
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
