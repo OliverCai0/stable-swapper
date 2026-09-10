@@ -47,6 +47,11 @@ pub mod stable_swapper {
         pool.liquidity_paused = false;
         pool.bump = ctx.bumps.pool;
 
+        let whitelist = &mut ctx.accounts.whitelist;
+        whitelist.addresses = Vec::new();
+        whitelist.enabled = false;
+        whitelist.bump = ctx.bumps.whitelist;
+
         msg!("Liquidity pool initialized with fee rate: {}", fee_rate);
         Ok(())
     }
@@ -707,6 +712,15 @@ pub struct Initialize<'info> {
     /// CHECK: Withdraw recipient can be any account; only its key matters. It seeds the withdraw
     /// allowlist, which `configure_authority` manages via add/remove after initialization.
     pub withdraw_recipient: UncheckedAccount<'info>,
+
+    #[account(
+        init,
+        payer = payer,
+        space = 8 + AddressWhitelist::INIT_SPACE,
+        seeds = [ADDRESS_WHITELIST_SEED],
+        bump
+    )]
+    pub whitelist: Account<'info, AddressWhitelist>,
 
     pub system_program: Program<'info, System>,
 }
