@@ -14,10 +14,6 @@ use utils::*;
 
 declare_id!("pqgqKahpG1y2wsgxFhzaAnkV1cL9vk8MSg9qm4q646F");
 
-// NOTE: The previously deployed whitelist PDA (seeded b"address_whitelist") is orphaned
-// on devnet/mainnet after whitelist removal. Its rent is intentionally forfeited; adding a
-// close_whitelist instruction is not worth the complexity for the small amount involved.
-
 #[program]
 pub mod stable_swapper {
     use super::*;
@@ -172,6 +168,13 @@ pub mod stable_swapper {
         require!(!pool.swaps_paused, LiquidityError::SwapsPaused);
         require!(amount_in > 0, LiquidityError::InvalidAmount);
         require!(min_amount_out > 0, LiquidityError::InvalidAmount);
+
+        if ctx.accounts.whitelist.enabled {
+            require!(
+                ctx.accounts.whitelist.is_whitelisted(&ctx.accounts.user.key()),
+                LiquidityError::NotWhitelisted
+            );
+        }
 
         // Check that neither token is disabled
         require!(
@@ -906,6 +909,12 @@ pub struct Swap<'info> {
 
     #[account(mut)]
     pub user: Signer<'info>,
+
+    #[account(
+        seeds = [ADDRESS_WHITELIST_SEED],
+        bump = whitelist.bump
+    )]
+    pub whitelist: Account<'info, AddressWhitelist>,
 
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,

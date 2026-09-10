@@ -1,4 +1,4 @@
-use crate::constants::{MAX_SUPPORTED_TOKENS, MAX_WITHDRAW_RECIPIENTS};
+use crate::constants::{MAX_SUPPORTED_TOKENS, MAX_WHITELISTED_ADDRESSES, MAX_WITHDRAW_RECIPIENTS};
 use anchor_lang::prelude::*;
 
 // Discriminator-stability invariant: Anchor derives the 8-byte account discriminator from
@@ -63,4 +63,19 @@ pub struct TokenVault {
 
 impl TokenVault {
     pub const INIT_SPACE: usize = 32 + 8 + 1 + 1; // mint + reserved_amount (layout-only) + disabled + bump
+}
+
+#[account]
+pub struct AddressWhitelist {
+    pub addresses: Vec<Pubkey>,
+    pub enabled: bool,
+    pub bump: u8,
+}
+
+impl AddressWhitelist {
+    pub const INIT_SPACE: usize = (4 + 32 * MAX_WHITELISTED_ADDRESSES) + 1 + 1; // addresses + enabled + bump
+
+    pub fn is_whitelisted(&self, address: &Pubkey) -> bool {
+        self.addresses.contains(address)
+    }
 }

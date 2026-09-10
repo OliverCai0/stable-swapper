@@ -12,6 +12,9 @@ pub const MAX_SUPPORTED_TOKENS: usize = 50;
 /// these addresses; only the cold-key configure authority can add or remove them.
 pub const MAX_WITHDRAW_RECIPIENTS: usize = 10;
 
+/// Maximum number of whitelisted addresses
+pub const MAX_WHITELISTED_ADDRESSES: usize = 100;
+
 /// Minimum allowed token decimals
 pub const MIN_TOKEN_DECIMALS: u8 = 6;
 
@@ -27,3 +30,6 @@ pub const TOKEN_VAULT_SEED: &[u8] = b"token_vault";
 
 /// Seed for vault token account PDA
 pub const VAULT_TOKEN_ACCOUNT_SEED: &[u8] = b"vault_token_account";
+
+/// Seed for address whitelist PDA
+pub const ADDRESS_WHITELIST_SEED: &[u8] = b"address_whitelist";
